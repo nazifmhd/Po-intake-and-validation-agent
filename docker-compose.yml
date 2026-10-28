@@ -1,0 +1,45 @@
+services:
+  api:
+    build: .
+    env_file: .env
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./storage:/app/storage
+      - ./data:/app/data
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8000/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 60s
+    restart: unless-stopped
+
+  review-ui:
+    build: .
+    env_file: .env
+    command: ["streamlit", "run", "review_ui/app.py", "--server.port=8501", "--server.address=0.0.0.0", "--server.headless=true"]
+    ports:
+      - "8501:8501"
+    volumes:
+      - ./storage:/app/storage
+      - ./data:/app/data
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # Zero-infrastructure fallback trigger: polls a mailbox over IMAP.
+  # Enable with:  docker compose --profile imap up
+  imap-poller:
+    build: .
+    env_file: .env
+    command: ["python", "-m", "app.intake.imap_poller"]
+    volumes:
+      - ./storage:/app/storage
+      - ./data:/app/data
+    depends_on:
+      api:
+        condition: service_healthy
+    profiles: ["imap"]
+    restart: unless-stopped

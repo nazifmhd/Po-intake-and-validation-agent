@@ -1,0 +1,5 @@
+po_number,po_date,vendor_name,vendor_tax_id,buyer_department,currency,payment_terms,delivery_date,line_no,sku,description,quantity,unit,unit_price,line_total,subtotal,tax,shipping,total
+PO-2026-0450,2026-10-27,Blue Yonder Paper Co.,US-11-2233445,Administration,USD,Net 30,2026-11-03,1,OFF-PPR-LTR,Copy paper US Letter 20lb case of 10 reams,30,CS,54.00,1620.00,2510.00,200.80,0.00,2710.80
+PO-2026-0450,2026-10-27,Blue Yonder Paper Co.,US-11-2233445,Administration,USD,Net 30,2026-11-03,2,OFF-TNR-BLK,Black toner cartridge high yield,10,EA,89.00,890.00,,,,
+PO-2026-0451,2026-10-27,Litware IT Services,US-22-3344556,IT,USD,Net 30,2026-11-04,1,IT-KBM-WLS,Wireless keyboard and mouse combo,25,EA,59.00,1475.00,3410.00,272.80,25.00,3707.80
+PO-2026-0451,2026-10-27,Litware IT Services,US-22-3344556,IT,USD,Net 30,2026-11-04,2,IT-HDS-ANC,Noise-cancelling USB headset,15,EA,129.00,1935.00,,,,

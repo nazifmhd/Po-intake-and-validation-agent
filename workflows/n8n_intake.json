@@ -1,0 +1,115 @@
+{
+  "name": "PO Intake - Email to Agent",
+  "nodes": [
+    {
+      "parameters": {
+        "mailbox": "INBOX",
+        "postProcessAction": "read",
+        "format": "resolved",
+        "dataPropertyAttachmentsPrefixName": "attachment_",
+        "options": {
+          "customEmailConfig": "[\"UNSEEN\"]"
+        }
+      },
+      "id": "a1f0c6c2-0001-4a8e-9c11-6f1c2b7d0001",
+      "name": "Email Trigger (IMAP)",
+      "type": "n8n-nodes-base.emailReadImap",
+      "typeVersion": 2,
+      "position": [240, 300],
+      "credentials": {
+        "imap": { "id": "1", "name": "PO inbox (IMAP)" }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "number": [
+            { "value1": "={{ Object.keys($binary || {}).length }}", "operation": "larger", "value2": 0 }
+          ]
+        }
+      },
+      "id": "a1f0c6c2-0002-4a8e-9c11-6f1c2b7d0002",
+      "name": "Has attachments?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.PO_AGENT_URL || 'http://api:8000' }}/webhook/inbound-email?provider=generic",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "X-Webhook-Secret", "value": "={{ $env.PO_AGENT_WEBHOOK_SECRET }}" }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "multipart-form-data",
+        "bodyParameters": {
+          "parameters": [
+            { "name": "message_id", "value": "={{ $json.messageId }}" },
+            { "name": "sender", "value": "={{ $json.from.value[0].address }}" },
+            { "name": "subject", "value": "={{ $json.subject }}" },
+            { "parameterType": "formBinaryData", "name": "attachment_1", "inputDataFieldName": "attachment_0" }
+          ]
+        },
+        "options": { "timeout": 30000 }
+      },
+      "id": "a1f0c6c2-0003-4a8e-9c11-6f1c2b7d0003",
+      "name": "POST to PO Agent",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [700, 220]
+    },
+    {
+      "parameters": {
+        "authentication": "webhook",
+        "text": "={{ ':inbox_tray: PO email from ' + $('Email Trigger (IMAP)').item.json.from.value[0].address + ' handed to the agent: ' + $json.status + ' (' + $json.jobs.length + ' job(s), ' + $json.rejected.length + ' rejected)' }}",
+        "otherOptions": {}
+      },
+      "id": "a1f0c6c2-0004-4a8e-9c11-6f1c2b7d0004",
+      "name": "Slack: intake receipt",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.2,
+      "position": [940, 220],
+      "credentials": {
+        "slackApi": { "id": "2", "name": "Slack incoming webhook" }
+      }
+    },
+    {
+      "parameters": {
+        "authentication": "webhook",
+        "text": "={{ ':information_source: Email \"' + $json.subject + '\" from ' + $json.from.value[0].address + ' had no attachment - skipped' }}",
+        "otherOptions": {}
+      },
+      "id": "a1f0c6c2-0005-4a8e-9c11-6f1c2b7d0005",
+      "name": "Slack: no attachment",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.2,
+      "position": [700, 400],
+      "credentials": {
+        "slackApi": { "id": "2", "name": "Slack incoming webhook" }
+      }
+    }
+  ],
+  "connections": {
+    "Email Trigger (IMAP)": {
+      "main": [[{ "node": "Has attachments?", "type": "main", "index": 0 }]]
+    },
+    "Has attachments?": {
+      "main": [
+        [{ "node": "POST to PO Agent", "type": "main", "index": 0 }],
+        [{ "node": "Slack: no attachment", "type": "main", "index": 0 }]
+      ]
+    },
+    "POST to PO Agent": {
+      "main": [[{ "node": "Slack: intake receipt", "type": "main", "index": 0 }]]
+    }
+  },
+  "active": false,
+  "settings": { "executionOrder": "v1" },
+  "meta": { "templateCredsSetupCompleted": false },
+  "pinData": {},
+  "tags": [{ "name": "po-agent" }]
+}

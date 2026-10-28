@@ -1,0 +1,16 @@
+vendor_id,name,aliases,tax_id,status,payment_terms,contact_email,notes
+V001,Acme Industrial Supplies Inc.,Acme Corp|ACME Corporation (Pvt) Ltd|Acme Industrial|Acme Supplies,US-12-3456789,active,Net 30,orders@acme-industrial.example,Primary MRO supplier
+V002,Northwind Office Products LLC,Northwind Office|Northwind Office Supplies|Northwind,US-23-4567890,active,Net 30,sales@northwind-office.example,Office furniture and supplies
+V003,Globex Technology Solutions Inc.,Globex Tech Solutions|Globex Technology|Globex,US-34-5678901,active,Net 30,ar@globex-tech.example,IT hardware reseller
+V004,Initrode Hardware Ltd,Initrode|Initrode Hardware,GB-987654321,active,Net 45,accounts@initrode.example,Networking hardware
+V005,Umbra Safety Equipment Co.,Umbra Safety|Umbra Safety Equipment,US-45-6789012,active,Net 30,orders@umbra-safety.example,PPE and safety
+V006,Brightline Electrical Components,Brightline Electrical|Brightline Components,US-56-7890123,active,Net 60,sales@brightline-elec.example,Electrical consumables
+V007,Harbor Packaging Solutions,Harbor Packaging|Harbour Packaging Solutions,US-67-8901234,active,Net 30,hello@harbor-pack.example,Packaging materials
+V008,Contoso Facilities Services,Contoso Facilities|Contoso FM,US-78-9012345,active,Net 45,billing@contoso-fm.example,Facilities and janitorial
+V009,Fabrikam Furniture Inc.,Fabrikam|Fabrikam Furniture,US-89-0123456,active,Net 60,orders@fabrikam-furn.example,Office furniture
+V010,Tailspin Logistics,Tailspin|Tailspin Freight,US-90-1234567,active,Net 30,ops@tailspin-log.example,Freight and courier
+V011,Blue Yonder Paper Co.,Blue Yonder Paper|BlueYonder Paper,US-11-2233445,active,Net 30,sales@blueyonder-paper.example,Paper and print consumables
+V012,Litware IT Services,Litware|Litware IT,US-22-3344556,active,Net 30,billing@litware.example,IT services and peripherals
+V013,Proseware Lab Supplies,Proseware|Proseware Laboratory Supplies,US-33-4455667,active,Net 45,orders@proseware-lab.example,Lab consumables
+V014,Adventure Works Tools,Adventure Works|AdventureWorks Tools,US-44-5566778,active,Net 30,trade@adventure-tools.example,Hand and power tools
+V015,Shadow Supply Traders,Shadow Supply|Shadow Supplies Trading,US-55-6677889,blocked,Net 30,info@shadow-supply.example,BLOCKED 2026-06: failed due-diligence / suspected invoice fraud

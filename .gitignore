@@ -1,0 +1,10 @@
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.env
+storage/
+!storage/.gitkeep
+*.egg-info/
+.streamlit/secrets.toml
+service_account*.json

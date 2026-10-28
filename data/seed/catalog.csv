@@ -1,0 +1,31 @@
+sku,description,category,unit,standard_unit_price,preferred_vendor_id
+OFF-CHR-ERG,Ergonomic mesh office chair with lumbar support,Office furniture,EA,285.00,V002
+OFF-DSK-ADJ,Height-adjustable standing desk 140x70cm,Office furniture,EA,540.00,V009
+OFF-LMP-LED,LED desk lamp with dimmer,Office supplies,EA,42.50,V002
+OFF-PPR-A4,Copy paper A4 80gsm box of 5 reams,Paper,BOX,38.50,V011
+OFF-PPR-LTR,Copy paper US Letter 20lb case of 10 reams,Paper,CS,54.00,V011
+OFF-TNR-BLK,Black toner cartridge high yield,Print consumables,EA,89.00,V011
+OFF-WBD-120,Magnetic whiteboard 120x90cm,Office supplies,EA,129.00,V002
+OFF-FIL-4DR,4-drawer steel filing cabinet,Office furniture,EA,310.00,V009
+IT-LAP-14P,14-inch business laptop 16GB RAM 512GB SSD,IT hardware,EA,1850.00,V003
+IT-DCK-USC,USB-C docking station dual display,IT hardware,EA,245.00,V003
+IT-MON-27Q,27-inch QHD monitor,IT hardware,EA,310.00,V003
+IT-KBM-WLS,Wireless keyboard and mouse combo,IT peripherals,EA,59.00,V012
+IT-HDS-ANC,Noise-cancelling USB headset,IT peripherals,EA,129.00,V012
+IT-SWT-24P,24-port gigabit managed switch,Networking,EA,420.00,V004
+IT-AP-WF6,Wi-Fi 6 ceiling access point,Networking,EA,265.00,V004
+IT-CBL-C6A,Cat6A patch cable 2m,Networking,EA,6.80,V004
+SAF-GLV-NIT,Nitrile gloves box of 100,Safety/PPE,BOX,14.20,V005
+SAF-HLM-HRD,Hard hat type II with ratchet,Safety/PPE,EA,32.00,V005
+SAF-VST-HV,High-visibility safety vest class 2,Safety/PPE,EA,11.50,V005
+SAF-GOG-AF,Anti-fog safety goggles,Safety/PPE,EA,9.75,V005
+ELE-CBL-12G,12 AWG copper building wire 100ft spool,Electrical,SPL,78.00,V006
+ELE-LED-T8,LED T8 tube 4ft 18W,Electrical,EA,8.90,V006
+ELE-BRK-20A,20A single-pole circuit breaker,Electrical,EA,12.40,V006
+PKG-BOX-M,Corrugated shipping box medium 18x14x12 bundle of 25,Packaging,BDL,36.00,V007
+PKG-TAP-48,Packing tape 48mm x 100m pack of 6,Packaging,PK,15.60,V007
+PKG-PLT-WRP,Pallet stretch wrap 18in x 1500ft,Packaging,RL,24.00,V007
+TLS-DRL-18V,18V cordless drill driver kit,Tools,EA,159.00,V014
+TLS-SET-SKT,Socket set 94-piece metric/SAE,Tools,SET,119.00,V014
+LAB-PIP-TIP,Pipette tips 200uL rack of 96,Lab consumables,RK,8.40,V013
+JAN-CLN-MP,Multi-purpose cleaner concentrate 5L,Janitorial,EA,22.00,V008

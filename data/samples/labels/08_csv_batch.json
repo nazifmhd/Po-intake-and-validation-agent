@@ -1,0 +1,75 @@
+{
+  "file": "08_csv_batch.csv",
+  "batch": [
+    {
+      "file": "08_csv_batch.csv",
+      "expected": {
+        "decision": "auto_approve",
+        "flags": []
+      },
+      "fields": {
+        "po_number": "PO-2026-0450",
+        "po_date": "2026-10-27",
+        "vendor_name": "Blue Yonder Paper Co.",
+        "vendor_tax_id": "US-11-2233445",
+        "buyer_department": "Administration",
+        "currency": "USD",
+        "payment_terms": "Net 30",
+        "delivery_date": "2026-11-03",
+        "subtotal": 2510.0,
+        "tax": 200.8,
+        "shipping": 0.0,
+        "total": 2710.8
+      },
+      "line_items": [
+        {
+          "sku": "OFF-PPR-LTR",
+          "quantity": 30,
+          "unit_price": 54.0,
+          "line_total": 1620.0
+        },
+        {
+          "sku": "OFF-TNR-BLK",
+          "quantity": 10,
+          "unit_price": 89.0,
+          "line_total": 890.0
+        }
+      ]
+    },
+    {
+      "file": "08_csv_batch.csv",
+      "expected": {
+        "decision": "auto_approve",
+        "flags": []
+      },
+      "fields": {
+        "po_number": "PO-2026-0451",
+        "po_date": "2026-10-27",
+        "vendor_name": "Litware IT Services",
+        "vendor_tax_id": "US-22-3344556",
+        "buyer_department": "IT",
+        "currency": "USD",
+        "payment_terms": "Net 30",
+        "delivery_date": "2026-11-04",
+        "subtotal": 3410.0,
+        "tax": 272.8,
+        "shipping": 25.0,
+        "total": 3707.8
+      },
+      "line_items": [
+        {
+          "sku": "IT-KBM-WLS",
+          "quantity": 25,
+          "unit_price": 59.0,
+          "line_total": 1475.0
+        },
+        {
+          "sku": "IT-HDS-ANC",
+          "quantity": 15,
+          "unit_price": 129.0,
+          "line_total": 1935.0
+        }
+      ]
+    }
+  ]
+}

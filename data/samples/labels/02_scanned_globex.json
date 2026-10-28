@@ -1,0 +1,38 @@
+{
+  "file": "02_scanned_globex.jpg",
+  "expected": {
+    "decision": "needs_review",
+    "flags": [
+      "price_anomaly",
+      "over_threshold"
+    ]
+  },
+  "fields": {
+    "po_number": "PO-2026-0419",
+    "po_date": "2026-10-22",
+    "vendor_name": "GLOBEX TECH SOLUTIONS INC",
+    "vendor_tax_id": "US-34-5678901",
+    "buyer_department": "IT",
+    "currency": "USD",
+    "payment_terms": "Net 30",
+    "delivery_date": "2026-11-12",
+    "subtotal": 13065.0,
+    "tax": 0.0,
+    "shipping": 435.0,
+    "total": 13500.0
+  },
+  "line_items": [
+    {
+      "sku": "IT-LAP-14P",
+      "quantity": 5,
+      "unit_price": 2368.0,
+      "line_total": 11840.0
+    },
+    {
+      "sku": "IT-DCK-USC",
+      "quantity": 5,
+      "unit_price": 245.0,
+      "line_total": 1225.0
+    }
+  ]
+}

@@ -1,0 +1,83 @@
+{
+  "file": "04_acme_alias_twocol.pdf",
+  "expected": {
+    "decision": "auto_approve",
+    "flags": []
+  },
+  "fields": {
+    "po_number": "PO-2026-0398",
+    "po_date": "2026-10-18",
+    "vendor_name": "ACME Corporation (Pvt) Ltd",
+    "vendor_tax_id": "US-12-3456789",
+    "buyer_department": "Plant Maintenance",
+    "currency": "USD",
+    "payment_terms": "Net 30",
+    "delivery_date": "2026-11-01",
+    "subtotal": 5805.5,
+    "tax": 406.39,
+    "shipping": 150.0,
+    "total": 6361.89
+  },
+  "line_items": [
+    {
+      "sku": "SAF-GLV-NIT",
+      "quantity": 40,
+      "unit_price": 14.2,
+      "line_total": 568.0
+    },
+    {
+      "sku": "SAF-HLM-HRD",
+      "quantity": 25,
+      "unit_price": 32.0,
+      "line_total": 800.0
+    },
+    {
+      "sku": "SAF-VST-HV",
+      "quantity": 60,
+      "unit_price": 11.5,
+      "line_total": 690.0
+    },
+    {
+      "sku": "SAF-GOG-AF",
+      "quantity": 50,
+      "unit_price": 9.75,
+      "line_total": 487.5
+    },
+    {
+      "sku": "TLS-DRL-18V",
+      "quantity": 6,
+      "unit_price": 165.0,
+      "line_total": 990.0
+    },
+    {
+      "sku": "TLS-SET-SKT",
+      "quantity": 4,
+      "unit_price": 119.0,
+      "line_total": 476.0
+    },
+    {
+      "sku": "ELE-LED-T8",
+      "quantity": 100,
+      "unit_price": 8.9,
+      "line_total": 890.0
+    },
+    {
+      "sku": "ELE-BRK-20A",
+      "quantity": 30,
+      "unit_price": 12.4,
+      "line_total": 372.0
+    },
+    {
+      "sku": "PKG-TAP-48",
+      "quantity": 20,
+      "unit_price": 15.6,
+      "line_total": 312.0
+    },
+    {
+      "sku": "JAN-CLN-MP",
+      "quantity": 10,
+      "unit_price": 22.0,
+      "line_total": 220.0
+    }
+  ]
+}

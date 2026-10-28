@@ -1,0 +1,37 @@
+{
+  "file": "05_blocked_vendor.pdf",
+  "expected": {
+    "decision": "needs_review",
+    "flags": [
+      "vendor_blocked"
+    ]
+  },
+  "fields": {
+    "po_number": "PO-2026-0427",
+    "po_date": "2026-10-25",
+    "vendor_name": "Shadow Supply Traders",
+    "vendor_tax_id": "US-55-6677889",
+    "buyer_department": "Warehouse",
+    "currency": "USD",
+    "payment_terms": "Net 30",
+    "delivery_date": "2026-11-08",
+    "subtotal": 1440.0,
+    "tax": 0.0,
+    "shipping": 80.0,
+    "total": 1520.0
+  },
+  "line_items": [
+    {
+      "sku": "PKG-BOX-M",
+      "quantity": 20,
+      "unit_price": 36.0,
+      "line_total": 720.0
+    },
+    {
+      "sku": "PKG-PLT-WRP",
+      "quantity": 30,
+      "unit_price": 24.0,
+      "line_total": 720.0
+    }
+  ]
+}

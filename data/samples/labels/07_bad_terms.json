@@ -1,0 +1,37 @@
+{
+  "file": "07_bad_terms.pdf",
+  "expected": {
+    "decision": "needs_review",
+    "flags": [
+      "noncompliant_terms"
+    ]
+  },
+  "fields": {
+    "po_number": "PO-2026-0433",
+    "po_date": "2026-10-27",
+    "vendor_name": "Umbra Safety Equipment Co.",
+    "vendor_tax_id": "US-45-6789012",
+    "buyer_department": "Plant Maintenance",
+    "currency": "USD",
+    "payment_terms": "Net 90",
+    "delivery_date": "2026-11-15",
+    "subtotal": 2340.0,
+    "tax": 187.2,
+    "shipping": 0.0,
+    "total": 2527.2
+  },
+  "line_items": [
+    {
+      "sku": "SAF-GLV-NIT",
+      "quantity": 100,
+      "unit_price": 14.2,
+      "line_total": 1420.0
+    },
+    {
+      "sku": "SAF-VST-HV",
+      "quantity": 80,
+      "unit_price": 11.5,
+      "line_total": 920.0
+    }
+  ]
+}

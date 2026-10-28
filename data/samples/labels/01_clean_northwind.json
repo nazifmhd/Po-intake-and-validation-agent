@@ -1,0 +1,35 @@
+{
+  "file": "01_clean_northwind.pdf",
+  "expected": {
+    "decision": "auto_approve",
+    "flags": []
+  },
+  "fields": {
+    "po_number": "PO-2026-0412",
+    "po_date": "2026-10-20",
+    "vendor_name": "Northwind Office Products LLC",
+    "vendor_tax_id": "US-23-4567890",
+    "buyer_department": "Operations",
+    "currency": "USD",
+    "payment_terms": "Net 30",
+    "delivery_date": "2026-11-05",
+    "subtotal": 3700.0,
+    "tax": 296.0,
+    "shipping": 204.0,
+    "total": 4200.0
+  },
+  "line_items": [
+    {
+      "sku": "OFF-CHR-ERG",
+      "quantity": 10,
+      "unit_price": 285.0,
+      "line_total": 2850.0
+    },
+    {
+      "sku": "OFF-LMP-LED",
+      "quantity": 20,
+      "unit_price": 42.5,
+      "line_total": 850.0
+    }
+  ]
+}
