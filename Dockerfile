@@ -12,13 +12,14 @@ RUN apt-get update \
 
 WORKDIR /app
 
-# dependencies first, pinned, so editing code doesn't reinstall them
-COPY pyproject.toml constraints.txt README.md ./
-RUN mkdir app && touch app/__init__.py \
-    && pip install ".[sheets]" -c constraints.txt \
-    && pip uninstall -y po-agent && rm -rf app build *.egg-info
+# dependencies first, pinned, so editing code or the README doesn't reinstall them
+COPY pyproject.toml constraints.txt ./
+RUN mkdir app && touch app/__init__.py README.md \
+    && pip install --timeout 120 --retries 10 ".[sheets]" -c constraints.txt \
+    && pip uninstall -y po-agent && rm -rf app build README.md *.egg-info
 COPY app ./app
 
+COPY .streamlit ./.streamlit
 COPY review_ui ./review_ui
 COPY data ./data
 COPY scripts ./scripts
