@@ -33,20 +33,41 @@ _FALLBACK_MODELS = {"claude-fable-5-1", "claude-opus-5-5", "claude-opus-5", "cla
 _FALLBACK_BETA = "server-side-fallback-2026-07-01"
 
 
+USAGE = {"calls": 0, "input_tokens": 0, "output_tokens": 0}  # process totals, reported by the eval script
+
+
+def _count(input_tokens: int, output_tokens: int) -> None:
+    USAGE["calls"] += 1
+    USAGE["input_tokens"] += input_tokens
+    USAGE["output_tokens"] += output_tokens
+
+
 class LLMError(Exception):
     """Non-retryable LLM failure (refusal, truncation, invalid output after retries)."""
+
+    def __init__(self, message: str, code: str = "llm_error"):
+        super().__init__(message)
+        self.code = code
 
 
 def strict_json_schema(model: Type[BaseModel]) -> dict:
     """Pydantic schema -> strict JSON schema accepted by both providers' structured-output modes:
-    every property required (nullability via anyOf-null), no extra properties, no defaults or
-    numeric bounds (bounds are enforced by Pydantic validation after the call)."""
+    every property required, no extra properties, no defaults or numeric bounds (bounds are enforced by
+    Pydantic validation after the call).
+
+    Claude allows at most 16 union-typed parameters per schema, and each nullable field is one. Nullable
+    strings are therefore sent as plain strings where "" means "not present" (the schema's validators turn
+    it back into None); only nullable numbers stay unions."""
     schema = copy.deepcopy(model.model_json_schema())
 
     def walk(node: Any) -> None:
         if isinstance(node, dict):
             for key in ("default", "title", "minimum", "maximum", "exclusiveMinimum", "exclusiveMaximum"):
                 node.pop(key, None)
+            if "anyOf" in node and {json.dumps(o, sort_keys=True) for o in node["anyOf"]} == \
+                    {'{"type": "null"}', '{"type": "string"}'}:
+                del node["anyOf"]
+                node["type"] = "string"
             if node.get("type") == "object" and "properties" in node:
                 node["required"] = list(node["properties"].keys())
                 node["additionalProperties"] = False
@@ -79,6 +100,8 @@ class LLMClient:
     def __init__(self, settings: Settings | None = None):
         self.settings = settings or get_settings()
         self.provider = self.settings.llm_provider
+        if self.provider == "openai" and not self.settings.openai_api_key:
+            raise LLMError("LLM_PROVIDER=openai but OPENAI_API_KEY is not set", code="llm_not_configured")
         if self.provider == "anthropic":
             import anthropic
 
@@ -167,7 +190,14 @@ class LLMClient:
             kwargs["extra_headers"] = {"anthropic-beta": _FALLBACK_BETA}
             kwargs["extra_body"] = {"fallbacks": "default"}
 
-        response = self._client.messages.create(**kwargs)
+        try:
+            response = self._client.messages.create(**kwargs)
+        except TypeError as exc:  # raised by the SDK before any request when no credentials resolve
+            if "authentication" in str(exc).lower():
+                raise LLMError("No Anthropic credentials: set ANTHROPIC_API_KEY in .env",
+                               code="llm_not_configured") from exc
+            raise
+        _count(response.usage.input_tokens, response.usage.output_tokens)
         if response.stop_reason == "refusal":
             details = getattr(response, "stop_details", None)
             raise LLMError(f"Model refused the request: {details}")
@@ -176,7 +206,10 @@ class LLMClient:
         texts = [b.text for b in response.content if getattr(b, "type", None) == "text"]
         if not texts:
             raise LLMError("Model returned no text content")
-        return texts[0]
+        logger.info("LLM call", extra={"model": response.model, "input_tokens": response.usage.input_tokens,
+                                       "output_tokens": response.usage.output_tokens,
+                                       "request_id": getattr(response, "_request_id", None)})
+        return texts[-1]  # after a server-side fallback the last text block is the final answer
 
     def _openai(self, system, text, schema, name, image_paths, max_tokens) -> str:
         content: list[dict] = [{"type": "text", "text": text}]
@@ -191,6 +224,8 @@ class LLMClient:
             response_format={"type": "json_schema",
                              "json_schema": {"name": name, "schema": schema, "strict": True}},
         )
+        if response.usage:
+            _count(response.usage.prompt_tokens, response.usage.completion_tokens)
         choice = response.choices[0]
         if getattr(choice.message, "refusal", None):
             raise LLMError(f"Model refused the request: {choice.message.refusal}")

@@ -5,9 +5,10 @@ Three paths, chosen per document:
   * LLM (Anthropic / OpenAI)      -> text and/or page images, native structured output + Pydantic
   * heuristic (offline fallback)  -> regex over the text layer / OCR text; lower confidence
 
-All paths finish in `finalize()`, which normalizes values and - critically - verifies each
-field's evidence actually occurs in the source text. Evidence that cannot be found is treated
-as a likely hallucination and the field's confidence is cut, which pushes the PO to review.
+All paths finish in `finalize()`, which normalizes values and - critically - verifies that each value
+is really in its evidence and the evidence is really in the source (app/extraction/verify.py). Anything
+that can't be traced back is treated as a likely hallucination: its confidence is cut, which pushes the
+PO to review.
 """
 from __future__ import annotations
 
@@ -16,12 +17,11 @@ import re
 from datetime import datetime
 from typing import Optional
 
-from rapidfuzz import fuzz
-
 from app.config import Settings, get_settings
 from app.extraction.prompts import EXTRACTION_SYSTEM, extraction_user_prompt
 from app.extraction.schema import Confidenced, LineItem, PurchaseOrder, PurchaseOrderExtraction
-from app.ingestion.loaders import RawDocument
+from app.extraction.verify import verify_grounding
+from app.ingestion.loaders import RawDocument, ocr_available
 
 logger = logging.getLogger(__name__)
 
@@ -179,15 +179,21 @@ def extract_from_csv(rows: list[dict]) -> PurchaseOrderExtraction:
         if not col:
             return None
         vals = [parse_number(r.get(col)) for r in rows if (r.get(col) or "").strip()]
+        if len(set(vals)) > 1:
+            conflicting.append(col)
         return vals[0] if vals else None
 
-    total = total_field("total")
+    conflicting: list[str] = []
+    amounts = {f: total_field(f) for f in ("subtotal", "tax", "shipping", "total")}
+    total = amounts["total"]
+    totals_conf = 0.0 if total is None else (0.5 if conflicting else 0.95)  # rows disagree on a header total
+    po_col = m.get("po_number")
+    numbers = list(dict.fromkeys(r[po_col].strip() for r in rows if po_col and (r.get(po_col) or "").strip()))
     return PurchaseOrderExtraction(
         po_number=header("po_number"), po_date=header("po_date"), vendor_name=header("vendor_name"),
         vendor_tax_id=header("vendor_tax_id"), buyer_department=header("buyer_department"),
         currency=header("currency"), line_items=items,
-        subtotal=total_field("subtotal"), tax=total_field("tax"), shipping=total_field("shipping"),
-        total=total, totals_confidence=0.95 if total is not None else 0.0,
+        **amounts, totals_confidence=totals_conf, additional_po_numbers=numbers[1:],
         totals_evidence=f"{m['total']}={first.get(m['total'])}" if total is not None and "total" in m else None,
         payment_terms=header("payment_terms"), delivery_date=header("delivery_date"),
     )
@@ -251,6 +257,9 @@ def extract_heuristic(doc: RawDocument) -> PurchaseOrderExtraction:
                 confidence=base, evidence=line.strip(),
             ))
 
+    numbers = [n.upper() for n in re.findall(_HEADER_PATTERNS["po_number"], text, re.I)]
+    others = [n for n in dict.fromkeys(numbers) if n != numbers[0]]
+
     totals: dict[str, Optional[float]] = {}
     total_ev = None
     for field, pattern in _TOTAL_PATTERNS.items():
@@ -262,6 +271,7 @@ def extract_heuristic(doc: RawDocument) -> PurchaseOrderExtraction:
     return PurchaseOrderExtraction(
         **header, line_items=items, **totals,
         totals_confidence=base if totals["total"] is not None else 0.0, totals_evidence=total_ev,
+        additional_po_numbers=others,
     )
 
 
@@ -271,7 +281,7 @@ def extract_llm(doc: RawDocument, settings: Settings) -> PurchaseOrderExtraction
 
     # Text PDFs: the text layer is exact, images add little. Scans/images: vision is primary,
     # OCR text (if any) is passed as secondary evidence.
-    images = doc.page_images if doc.doc_type in ("pdf_scanned", "image") else []
+    images = doc.vision_images
     if not images and not doc.raw_text.strip():
         raise ExtractionError("empty_document", "Nothing to extract: no text and no page images")
     client = LLMClient(settings)
@@ -284,16 +294,6 @@ def extract_llm(doc: RawDocument, settings: Settings) -> PurchaseOrderExtraction
 
 
 # --------------------------------------------------------------------------- finalize
-def _evidence_found(evidence: str, source: str) -> bool:
-    if not evidence or not source:
-        return True
-    ev = " ".join(evidence.split()).lower()
-    src = " ".join(source.split()).lower()
-    if ev in src:
-        return True
-    return fuzz.partial_ratio(ev, src) >= 85
-
-
 def finalize(ext: PurchaseOrderExtraction, doc: RawDocument, method: str) -> PurchaseOrder:
     po = PurchaseOrder(**ext.model_dump(), extraction_method=method)
     warnings: list[str] = list(doc.warnings)
@@ -322,27 +322,16 @@ def finalize(ext: PurchaseOrderExtraction, doc: RawDocument, method: str) -> Pur
 
     # --- anti-hallucination: evidence must exist in the source text ---
     # (deterministic CSV mapping can't hallucinate; its evidence is a column reference, not a quote)
-    can_verify = (doc.text_source in ("text_layer", "csv") and len(doc.raw_text) > 50
-                  and method != "csv_columns")
-    if can_verify:
-        for f in PurchaseOrder.HEADER_FIELDS:
-            c = getattr(po, f)
-            if c.present and c.evidence and not _evidence_found(c.evidence, doc.raw_text):
-                c.confidence = round(c.confidence * 0.5, 3)
-                warnings.append(f"{f}: evidence not found in source text (possible hallucination)")
-        for li in po.line_items:
-            if li.evidence and not _evidence_found(li.evidence, doc.raw_text):
-                li.confidence = round(li.confidence * 0.5, 3)
-                warnings.append(f"line {li.line_no}: evidence not found in source text")
-        if po.total is not None and po.totals_evidence and not _evidence_found(po.totals_evidence, doc.raw_text):
-            po.totals_confidence = round(po.totals_confidence * 0.5, 3)
-            warnings.append("total: evidence not found in source text")
+    if method != "csv_columns":
+        warnings += verify_grounding(po, doc)
 
     # --- a present value with zero confidence / a null value with high confidence are both suspect ---
     for f in PurchaseOrder.HEADER_FIELDS:
         c = getattr(po, f)
-        if not c.present and c.confidence > 0.2:
+        if not c.present:
             c.confidence = 0.0
+    po.additional_po_numbers = [n for n in po.additional_po_numbers
+                                if n.strip() and n.strip().upper() != (po.po_number.value or "").upper()]
     if not po.line_items:
         warnings.append("No line items were extracted")
     if po.total is None:
@@ -360,10 +349,12 @@ def extract(doc: RawDocument, settings: Settings | None = None) -> PurchaseOrder
         return finalize(extract_from_csv(doc.csv_rows), doc, "csv_columns")
     if settings.llm_provider in ("anthropic", "openai"):
         return finalize(extract_llm(doc, settings), doc, f"llm:{settings.llm_provider}")
-    if not doc.raw_text.strip():
+    if not re.sub(r"--- page \d+ ---", "", doc.raw_text).strip():
         raise ExtractionError(
             "no_text_for_offline_extraction",
             "Offline (heuristic) extraction needs a text layer or OCR text; this document has neither. "
             "Configure an LLM provider with vision to process scans.",
         )
+    if doc.doc_type == "pdf_mixed" and not ocr_available():
+        doc.flags["unread_pages"] = f"{len(doc.vision_images)} scanned page(s) could not be read offline"
     return finalize(extract_heuristic(doc), doc, "heuristic")

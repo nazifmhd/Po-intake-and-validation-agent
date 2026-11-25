@@ -18,6 +18,13 @@ def _clamp01(v: Any) -> float:
     return max(0.0, min(1.0, f))
 
 
+def _blank_to_none(v: Any) -> Any:
+    """The LLM-facing schema has no nullable strings (see llm.strict_json_schema): "" means "not present"."""
+    if isinstance(v, str) and v.strip().lower() in {"", "null", "none", "n/a"}:
+        return None
+    return v
+
+
 class Confidenced(BaseModel):
     value: Optional[str] = None
     confidence: float = Field(default=0.0, ge=0, le=1)
@@ -27,6 +34,11 @@ class Confidenced(BaseModel):
     @classmethod
     def _clamp_confidence(cls, v: Any) -> float:
         return _clamp01(v)
+
+    @field_validator("value", "evidence", mode="before")
+    @classmethod
+    def _blank(cls, v: Any) -> Any:
+        return _blank_to_none(v)
 
     @classmethod
     def missing(cls) -> "Confidenced":
@@ -53,6 +65,11 @@ class LineItem(BaseModel):
     def _clamp_confidence(cls, v: Any) -> float:
         return _clamp01(v)
 
+    @field_validator("sku", "description", "unit", "evidence", mode="before")
+    @classmethod
+    def _blank(cls, v: Any) -> Any:
+        return _blank_to_none(v)
+
 
 class PurchaseOrderExtraction(BaseModel):
     """Exactly what the LLM is asked to produce."""
@@ -72,6 +89,12 @@ class PurchaseOrderExtraction(BaseModel):
     totals_evidence: Optional[str] = None
     payment_terms: Confidenced
     delivery_date: Confidenced
+    additional_po_numbers: list[str] = Field(default_factory=list)  # other POs found in the same document
+
+    @field_validator("totals_evidence", mode="before")
+    @classmethod
+    def _blank(cls, v: Any) -> Any:
+        return _blank_to_none(v)
 
     @field_validator("totals_confidence", mode="before")
     @classmethod
@@ -98,6 +121,8 @@ class PurchaseOrder(PurchaseOrderExtraction):
 
 
 # Fields the policy requires on every PO (see data/seed/policy.md, "Required fields")
-REQUIRED_HEADER_FIELDS = ("po_number", "po_date", "vendor_name", "delivery_date")
-# Critical fields used by the decision policy (blueprint section 4)
-CRITICAL_FIELDS = ("vendor_name", "total", "line_items")
+REQUIRED_HEADER_FIELDS = ("po_number", "po_date", "vendor_name", "currency", "payment_terms", "delivery_date")
+# Critical fields used by the decision policy: blueprint section 4 (vendor, total, line items) plus the PO
+# number (the dedup key - a misread one would be dropped as a duplicate) and the currency (the approval
+# threshold is meaningless without it)
+CRITICAL_FIELDS = ("vendor_name", "total", "line_items", "po_number", "currency")

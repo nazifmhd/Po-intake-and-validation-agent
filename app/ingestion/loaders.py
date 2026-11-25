@@ -30,13 +30,15 @@ class IngestionError(Exception):
 
 @dataclass
 class RawDocument:
-    doc_type: str                      # pdf_text | pdf_scanned | image | csv
+    doc_type: str                      # pdf_text | pdf_mixed | pdf_scanned | image | csv
     raw_text: str = ""                 # text layer, OCR text, or CSV rendered as text
-    text_source: str = "none"          # text_layer | ocr | csv | none
+    text_source: str = "none"          # text_layer | mixed | ocr | csv | none
     page_images: list[str] = field(default_factory=list)
     page_count: int = 0
     csv_rows: list[dict] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
+    vision_images: list[str] = field(default_factory=list)  # pages the model must look at (subset of page_images)
+    flags: dict[str, str] = field(default_factory=dict)     # ingestion problems that force review: code -> reason
 
 
 def ocr_available() -> bool:
@@ -65,15 +67,24 @@ def _ocr_image(path: str) -> str:
         return pytesseract.image_to_string(img, config="--psm 6")
 
 
-def _normalize_image(src: Path | io.BytesIO, out_path: Path) -> None:
-    from PIL import Image, ImageOps
+def _save_normalized(img, out_path: Path) -> None:
+    from PIL import ImageOps
 
-    with Image.open(src) as img:
-        img = ImageOps.exif_transpose(img)  # phone photos carry their rotation in EXIF
-        if img.mode not in ("RGB", "L"):
-            img = img.convert("RGB")
-        img.thumbnail((MAX_IMAGE_SIDE, MAX_IMAGE_SIDE))
-        img.save(out_path, format="PNG", optimize=True)
+    img = ImageOps.exif_transpose(img)  # phone photos carry their rotation in EXIF
+    if img.mode not in ("RGB", "L"):
+        img = img.convert("RGB")
+    img.thumbnail((MAX_IMAGE_SIDE, MAX_IMAGE_SIDE))
+    img.save(out_path, format="JPEG", quality=92)  # a noisy photo as PNG would approach the API's size limit
+
+
+def _is_scanned_page(page, text: str) -> bool:
+    """Little text but something drawn on it, or a picture covering most of the page (a scan that carries
+    the scanner's own OCR layer). A blank trailing page is not a scan."""
+    images = page.get_image_info()
+    if len(text.strip()) < MIN_TEXT_CHARS_PER_PAGE:
+        return bool(images) or len(page.get_drawings()) > 20
+    area = abs(page.rect.width * page.rect.height) or 1
+    return any(abs((i["bbox"][2] - i["bbox"][0]) * (i["bbox"][3] - i["bbox"][1])) / area > 0.6 for i in images)
 
 
 def load_pdf(path: Path, pages_dir: Path) -> RawDocument:
@@ -90,9 +101,11 @@ def load_pdf(path: Path, pages_dir: Path) -> RawDocument:
         if doc.page_count == 0:
             raise IngestionError("corrupt_file", "PDF has no pages")
         warnings: list[str] = []
+        flags: dict[str, str] = {}
         page_count = doc.page_count
         if page_count > MAX_PAGES:
-            warnings.append(f"PDF has {page_count} pages; only the first {MAX_PAGES} were processed")
+            flags["truncated_document"] = f"PDF has {page_count} pages; only the first {MAX_PAGES} were processed"
+            warnings.append(flags["truncated_document"])
 
         # Text layer: pdfplumber keeps row layout (one table row per line), PyMuPDF is the fallback
         text_pages: list[str] = []
@@ -106,31 +119,40 @@ def load_pdf(path: Path, pages_dir: Path) -> RawDocument:
             logger.warning("pdfplumber failed, falling back to PyMuPDF text", extra={"error": str(exc)})
             text_pages = [doc[i].get_text("text") for i in range(min(page_count, MAX_PAGES))]
 
-        scanned = [len(t.strip()) < MIN_TEXT_CHARS_PER_PAGE for t in text_pages]
-        is_scan = sum(scanned) > len(scanned) / 2
+        scanned = [_is_scanned_page(doc[i], t) for i, t in enumerate(text_pages)]
 
         page_images: list[str] = []
         pages_dir.mkdir(parents=True, exist_ok=True)
         # Always render pages: scans need them for vision; text PDFs use them in the review UI
         for i in range(min(page_count, MAX_PAGES)):
-            pix = doc[i].get_pixmap(dpi=RENDER_DPI)
-            out = pages_dir / f"page-{i + 1}.png"
-            pix.save(out)
-            if max(pix.width, pix.height) > MAX_IMAGE_SIDE:
-                _normalize_image(out, out)
+            # JPEG for scans (photographic, PNG would be huge), PNG for crisp text pages
+            rect = doc[i].rect
+            dpi = max(72, min(RENDER_DPI, int(MAX_IMAGE_SIDE * 72 / max(rect.width, rect.height, 1))))
+            out = pages_dir / f"page-{i + 1}.{'jpg' if scanned[i] else 'png'}"
+            doc[i].get_pixmap(dpi=dpi).save(out)
             page_images.append(str(out))
 
-    if not is_scan:
+    vision = [p for p, s in zip(page_images, scanned) if s]
+    if not vision:
+        if not any(t.strip() for t in text_pages):
+            raise IngestionError("empty_document", "PDF has no text and no images on any page")
         text = "\n\n".join(f"--- page {i + 1} ---\n{t}" for i, t in enumerate(text_pages))
-        return RawDocument("pdf_text", text, "text_layer", page_images, page_count, warnings=warnings)
+        return RawDocument("pdf_text", text, "text_layer", page_images, page_count, warnings=warnings, flags=flags)
 
-    raw_text, source = "", "none"
-    if ocr_available():
-        raw_text = "\n\n".join(f"--- page {i + 1} ---\n{_ocr_image(p)}" for i, p in enumerate(page_images))
-        source = "ocr"
+    # At least one scanned page. A PO that is half text, half scan must not lose the scanned half.
+    ocr = ocr_available()
+    if ocr:
+        text_pages = [_ocr_image(p) if s and len(t.strip()) < MIN_TEXT_CHARS_PER_PAGE else t
+                      for p, s, t in zip(page_images, scanned, text_pages)]
     else:
-        warnings.append("Scanned PDF and no local OCR engine; relying on the vision model only")
-    return RawDocument("pdf_scanned", raw_text, source, page_images, page_count, warnings=warnings)
+        warnings.append("Scanned page(s) and no local OCR engine; relying on the vision model only")
+    mixed = any(t.strip() and not s for s, t in zip(scanned, text_pages))
+    text = ""
+    if any(t.strip() for t in text_pages):
+        text = "\n\n".join(f"--- page {i + 1} ---\n{t}" for i, t in enumerate(text_pages))
+    source = "mixed" if mixed else ("ocr" if text else "none")
+    return RawDocument("pdf_mixed" if mixed else "pdf_scanned", text, source, page_images, page_count,
+                       warnings=warnings, vision_images=vision, flags=flags)
 
 
 def load_image(path: Path, pages_dir: Path) -> RawDocument:
@@ -138,39 +160,53 @@ def load_image(path: Path, pages_dir: Path) -> RawDocument:
 
     try:
         with Image.open(path) as img:
-            img.verify()  # detects truncated / corrupt files
-    except (UnidentifiedImageError, OSError, SyntaxError) as exc:
+            img.verify()  # detects corrupt files
+        pages_dir.mkdir(parents=True, exist_ok=True)
+        outs = []
+        with Image.open(path) as img:
+            frames = getattr(img, "n_frames", 1)  # multi-page TIFF scans
+            for i in range(min(frames, MAX_PAGES)):
+                img.seek(i)
+                out = pages_dir / f"page-{i + 1}.jpg"
+                _save_normalized(img, out)  # decoding here also catches truncated files
+                outs.append(str(out))
+    except (UnidentifiedImageError, Image.DecompressionBombError, OSError, SyntaxError, ValueError) as exc:
         raise IngestionError("corrupt_file", f"Cannot read image: {exc}") from exc
 
-    pages_dir.mkdir(parents=True, exist_ok=True)
-    out = pages_dir / "page-1.png"
-    _normalize_image(path, out)
-
     raw_text, source, warnings = "", "none", []
+    flags: dict[str, str] = {}
+    if frames > MAX_PAGES:
+        flags["truncated_document"] = f"Image has {frames} pages; only the first {MAX_PAGES} were processed"
     if ocr_available():
-        raw_text = _ocr_image(str(out))
+        raw_text = "\n\n".join(_ocr_image(p) for p in outs)
         source = "ocr"
     else:
         warnings.append("Image input and no local OCR engine; relying on the vision model only")
-    return RawDocument("image", raw_text, source, [str(out)], 1, warnings=warnings)
+    return RawDocument("image", raw_text, source, outs, frames, warnings=warnings, vision_images=list(outs),
+                       flags=flags)
+
+
+def decode_csv(data: bytes) -> tuple[str, type[csv.Dialect]]:
+    """Encoding + delimiter detection, shared by the loader and the batch splitter."""
+    text = ""
+    for enc in ("utf-8-sig", "cp1252", "latin-1"):
+        try:
+            text = data.decode(enc)
+            break
+        except UnicodeDecodeError:
+            continue
+    try:
+        dialect = csv.Sniffer().sniff(text[:4096], delimiters=",;\t|")
+    except csv.Error:
+        dialect = csv.excel
+    return text, dialect
 
 
 def load_csv(path: Path) -> RawDocument:
     try:
-        data = path.read_bytes()
-        text = None
-        for enc in ("utf-8-sig", "cp1252", "latin-1"):
-            try:
-                text = data.decode(enc)
-                break
-            except UnicodeDecodeError:
-                continue
-        if text is None or not text.strip():
+        text, dialect = decode_csv(path.read_bytes())
+        if not text.strip():
             raise IngestionError("empty_file", "CSV is empty")
-        try:
-            dialect = csv.Sniffer().sniff(text[:4096], delimiters=",;\t|")
-        except csv.Error:
-            dialect = csv.excel
         rows = list(csv.DictReader(io.StringIO(text), dialect=dialect))
     except IngestionError:
         raise
@@ -178,8 +214,12 @@ def load_csv(path: Path) -> RawDocument:
         raise IngestionError("corrupt_file", f"Cannot parse CSV: {exc}") from exc
     if not rows:
         raise IngestionError("empty_file", "CSV has a header but no rows")
+    flags = {}
+    ragged = [i for i, r in enumerate(rows, start=2) if None in r]
+    if ragged:  # e.g. an unquoted "1,540.00" - the columns after it are shifted and can't be trusted
+        flags["malformed_csv"] = f"Row(s) {', '.join(map(str, ragged[:5]))} have more cells than the header"
     rows = [{(k or "").strip(): (v or "").strip() for k, v in r.items() if k is not None} for r in rows]
-    return RawDocument("csv", text, "csv", [], 1, csv_rows=rows)
+    return RawDocument("csv", text, "csv", [], 1, csv_rows=rows, flags=flags)
 
 
 def load_document(path: str | Path, pages_dir: str | Path) -> RawDocument:
