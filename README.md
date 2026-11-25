@@ -40,6 +40,16 @@ flowchart TD
 | 6. Routing | [app/graph/](app/graph/) | Conditional edge `store` / `review` / `skip`; every node is wrapped fail-safe |
 | 7. Actions | [app/actions/](app/actions/) | SQLModel writes, review queue with corrections, Slack, append-only audit (DB triggers **and** JSONL), optional Google Sheets mirror |
 
+### The review desk
+
+| | |
+|---|---|
+| ![Review workspace](docs/review.png) | **A held PO.** Why it was held in plain words, the six checks, and the flagged price and total marked on the photographed document itself. |
+| ![Lookalike vendor](docs/lookalike.png) | **A lookalike vendor.** Spelled 92% like an approved one, but the embedding disagrees. The match is shown as unconfirmed and nothing is preselected. |
+| ![Overview](docs/overview.png) | **Overview.** Live activity, what was filed automatically, and why the rest was held. |
+
+Screenshots are from a live run on Claude Sonnet 5.5.
+
 ---
 
 ## Why purchase orders, and why RAG is not decoration
@@ -116,13 +126,14 @@ python scripts/init_env.py
 python -m app.cli kb build                              # 3 Chroma collections
 uvicorn app.main:app --port 8000                        # API + webhook
 streamlit run review_ui/app.py                          # review UI on :8501
-pytest                                                  # 186 tests, fully offline
+pytest                                                  # 205 tests, fully offline
 ```
 
 No API key? Set `LLM_PROVIDER=heuristic`. Text PDFs and CSVs then run end to end with a deterministic parser; scans go to review.
 
-### Sending a test email (three ways)
+### Sending a test email
 
+0. **From the browser:** open http://localhost:8501, page *Send a PO*. It posts a signed email to the webhook with one click (demo documents or your own file) and shows the agent working live.
 1. **Signed webhook, no domain needed:** `python scripts/simulate_webhook.py data/samples/01_clean_northwind.pdf` posts a correctly HMAC-signed Mailgun payload. Add `--bad-signature` to see the 401, or re-use `--message-id` to see dedup. In Docker: `docker compose exec api python scripts/simulate_webhook.py data/samples/01_clean_northwind.pdf`.
 2. **Real email → IMAP:** set `IMAP_*` (a dedicated Gmail inbox with an App Password), run the poller, then `python scripts/send_test_email.py data/samples/01_clean_northwind.pdf` (uses `SMTP_*`).
 3. **Real email → webhook:** point a Mailgun route at `https://<tunnel>/webhook/inbound-email?provider=mailgun` (e.g. `ngrok http 8000`). For SendGrid Inbound Parse set `WEBHOOK_PROVIDER=sendgrid` and use `…?provider=sendgrid&token=<WEBHOOK_SHARED_SECRET>`.
@@ -189,10 +200,12 @@ With the vector store down, matching degrades to lexical **and becomes stricter*
 
 ## Human-in-the-loop
 
-[review.py](app/actions/review.py) holds the rules, so the UI and the API enforce the same ones.
+[review.py](app/actions/review.py) holds the rules, so the UI and the API enforce the same ones. The [review desk](review_ui/) has six pages: overview, send a PO, review queue, filed POs, knowledge base and audit log.
+
+- **See why.** Each flag has a plain title, the reason, the cited policy clause and what to do about it. Flagged values are marked on the source document: PDFs by text search, scans through OCR word positions. A check that had nothing to check shows "not possible", never "passed".
 
 - **Correct.** The reviewer fixes misread values next to the source document, and *every check runs again*, so a correction can clear flags or raise new ones. The original extraction is kept, and the change is audit-logged with before/after values. Unreadable documents can be keyed in by hand. **Reprocess** extracts the original file again, e.g. after an LLM outage.
-- **Approve** needs an *active* registry vendor (looked up at that moment), all critical fields, and a written note if any flag is being overridden. A blocked vendor can't be approved or relabelled. The claim, the filed PO and the learned alias are one transaction; of two simultaneous clicks one wins.
+- **Approve** needs an *active* registry vendor (looked up at that moment), all critical fields, and a written note if any flag is being overridden. A blocked vendor can't be approved or relabelled, and an *uncertain* match is never adopted by default: the reviewer has to name the record. The claim, the filed PO and the learned alias are one transaction; of two simultaneous clicks one wins.
 - **Amendments.** Same PO number with different content is never dropped: the reviewer sees the differences and can replace the filed PO, which becomes `superseded`.
 - **Vendor alias learning.** A confirmed spelling is stored and indexed; it is refused if it already belongs to another vendor.
 
@@ -250,7 +263,7 @@ Observability: structured JSON logs per node (job id, duration, outcome), token 
 - **In-process jobs, durable state.** `BackgroundTasks` plus a job table and a sweeper: no broker to run, and nothing lost on a crash. `run_job()` drops into Celery/RQ unchanged.
 - **Stretch items built:** extraction and retrieval eval harnesses, alias learning, reprocess and correction in the UI, structured logs, optional Google Sheets mirror, [n8n export](workflows/n8n_intake.json) (set `WEBHOOK_EXTRA_PROVIDERS=generic`).
 
-**Known limits.** One API process (the webhook replay cache, filing lock and startup recovery are per process; `UNIQUE` constraints still hold across processes). The audit triggers are SQLite-only, and Postgres is untested. Reviewer names are self-declared: real use needs SSO. Non-USD POs are flagged rather than converted. Evidence is a text snippet, not a bounding box. Local file storage, no S3.
+**Known limits.** One API process (the webhook replay cache, filing lock and startup recovery are per process; `UNIQUE` constraints still hold across processes). The audit triggers are SQLite-only, and Postgres is untested. Reviewer names are self-declared: real use needs SSO. Non-USD POs are flagged rather than converted. Values are located on the document for display by searching for them; the extraction itself stores a text snippet, not coordinates. Local file storage, no S3.
 
 ## Repository layout
 
@@ -259,7 +272,7 @@ app/
   main.py               FastAPI app + /webhook/inbound-email + authenticated API
   config.py · cli.py    pydantic-settings (all thresholds) · kb build, process, imap
   llm.py                provider-agnostic structured output (Claude / OpenAI), vision, retries
-  intake/               common.py (dedup, jobs, recovery, CSV split) · webhook.py (signatures) · imap_poller.py
+  intake/               common.py (dedup, jobs, recovery, CSV split) · webhook.py (signatures) · imap_poller.py · simulate.py
   ingestion/loaders.py  PDF / image / CSV detection, text, page images, OCR
   extraction/           schema.py · prompts.py · extractor.py (LLM / CSV / heuristic) · verify.py (grounding)
   rag/                  store.py · ingest_kb.py · vendors.py · catalog.py · policy.py · rules.py (limits from text)
@@ -267,9 +280,9 @@ app/
   graph/                state.py · nodes.py (fail-safe nodes) · build.py (LangGraph wiring)
   actions/              store.py · review.py (HITL rules) · notify.py · audit.py · sheets.py
   models.py · db.py     SQLModel tables, append-only triggers
-review_ui/app.py        Streamlit review queue
+review_ui/              Streamlit review desk: app.py (shell) · pages.py · document.py (marks values) · data.py · theme.py
 data/seed/ · data/samples/ · data/eval/     knowledge base · demo + labelled files · retrieval cases
 scripts/                init_env · make_samples · simulate_webhook · send_test_email · eval_extraction · eval_retrieval · ablation
 workflows/              n8n_intake.json
-tests/                  186 tests, offline
+tests/                  205 tests, offline
 ```
