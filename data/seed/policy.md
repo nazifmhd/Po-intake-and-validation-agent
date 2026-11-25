@@ -32,8 +32,8 @@ the buyer. Items not in the catalog (non-catalog purchases) require a review of 
 and price by Procurement.
 
 ## Required fields
-Every PO must state: PO number, PO date, vendor name, requested delivery date, at least one line item
-(with quantity and unit price), and the grand total. A PO missing any required field is incomplete
+Every PO must state: PO number, PO date, vendor name, currency, payment terms, requested delivery date,
+at least one line item (with quantity and unit price), and the grand total. A PO missing any required field is incomplete
 and must be corrected before booking.
 
 ## Currency

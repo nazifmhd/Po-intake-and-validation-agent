@@ -11,6 +11,7 @@ lexical scan over all records (fine for a KB this size, and what the offline tes
 from __future__ import annotations
 
 import csv
+import hashlib
 import logging
 import re
 from dataclasses import dataclass, field
@@ -88,7 +89,7 @@ def load_catalog(seed_dir: Path) -> list[Product]:
 
 def load_policy_chunks(seed_dir: Path) -> list[PolicyChunk]:
     """Chunk policy.md on '## ' headings - each clause is one retrievable unit."""
-    text = (seed_dir / "policy.md").read_text(encoding="utf-8")
+    text = (seed_dir / "policy.md").read_text(encoding="utf-8").lstrip("﻿")
     chunks, heading, buf = [], "Preamble", []
     for line in text.splitlines():
         if line.startswith("## "):
@@ -100,6 +101,14 @@ def load_policy_chunks(seed_dir: Path) -> list[PolicyChunk]:
     if "".join(buf).strip():
         chunks.append((heading, "\n".join(buf).strip()))
     return [PolicyChunk(f"policy-{i:02d}", h, t) for i, (h, t) in enumerate(chunks)]
+
+
+def seed_fingerprint(seed_dir: Path) -> str:
+    """Stamped on every collection, so editing vendors/catalog/policy rebuilds the index on next start."""
+    h = hashlib.sha256(b"kb-v2")
+    for name in ("vendors.csv", "catalog.csv", "policy.md"):
+        h.update((seed_dir / name).read_bytes().replace(b"\r\n", b"\n"))
+    return h.hexdigest()[:16]
 
 
 # ------------------------------------------------------------------ embeddings
@@ -166,14 +175,17 @@ class VectorIndex:
     def collection(self, name: str):
         return self.client.get_or_create_collection(
             name=name, embedding_function=None,
-            metadata={"hnsw:space": "cosine", "embedder": self.embedder.name},
+            metadata={"hnsw:space": "cosine", "embedder": self.embedder.name,
+                      "seed": seed_fingerprint(self.settings.seed_path)},
         )
 
     def is_built(self) -> bool:
         try:
             for name in (VENDORS, CATALOG, POLICY):
                 col = self.client.get_collection(name)
-                if col.count() == 0 or (col.metadata or {}).get("embedder") != self.embedder.name:
+                meta = col.metadata or {}
+                if col.count() == 0 or meta.get("embedder") != self.embedder.name \
+                        or meta.get("seed") != seed_fingerprint(self.settings.seed_path):
                     return False
             return True
         except Exception:
@@ -246,6 +258,11 @@ def normalize_name(name: str) -> str:
     s = re.sub(r"[^\w\s]", " ", s)
     s = re.sub(_LEGAL_SUFFIXES, " ", s)
     return " ".join(s.split())
+
+
+def base_name(name: str) -> str:
+    """Normalized name for exact comparison; falls back to the raw name if only legal suffixes are left."""
+    return normalize_name(name) or name.lower().strip()
 
 
 def normalize_tax_id(tax_id: str) -> str:

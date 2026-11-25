@@ -5,7 +5,7 @@
 
 approved_vendors    one document per vendor *name or alias* (so "Acme Corp" and
                     "ACME Corporation (Pvt) Ltd" are both directly retrievable), metadata -> vendor_id
-product_catalog     one document per SKU: "SKU - description (category, unit)"
+product_catalog     one document per SKU: its description (SKU codes are matched exactly, not semantically)
 procurement_policy  one document per policy clause (## heading)
 """
 from __future__ import annotations
@@ -48,7 +48,7 @@ def build_knowledge_base(settings: Settings | None = None, if_missing: bool = Fa
     index.upsert(
         CATALOG,
         [p.sku for p in catalog],
-        [f"{p.sku} - {p.description} ({p.category}, per {p.unit})" for p in catalog],
+        [p.description for p in catalog],
         [{"sku": p.sku, "standard_unit_price": p.standard_unit_price, "unit": p.unit} for p in catalog],
     )
     index.upsert(

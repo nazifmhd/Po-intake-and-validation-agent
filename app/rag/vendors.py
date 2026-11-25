@@ -1,11 +1,19 @@
 """Vendor validation: is this a real, active vendor - and which record is it, despite spelling drift?
 
-Hybrid matching (blueprint section 5):
-  1. semantic retrieval over every vendor name + alias  -> candidate vendors
+Hybrid matching (blueprint section 5) - two independent signals that must agree:
+  1. semantic similarity over every vendor name + alias (embeddings)
      (+ exact tax-ID lookup, which is identity evidence independent of spelling)
-  2. fuzzy re-rank (rapidfuzz) on normalized names       -> precise similarity score
-  3. confidence band: high -> accept, medium -> accept but flag, low/none -> unknown
+  2. fuzzy similarity (rapidfuzz) on normalized names
+  3. confidence band:
+       accept     exact name/alias, or tax ID + plausible name, or fuzzy high AND semantic high
+       uncertain  only one signal is convincing -> flagged, with the suggested vendor
+       unknown    neither is
      plus an ambiguity check when two different vendors score within a small margin.
+
+Why both: "Apex Industrial Supplies Inc" is 92% fuzzy-similar to "Acme Industrial Supplies Inc." but is a
+different company - the embedding (0.76; true variants score >= 0.93) vetoes it. Conversely "Fabrikam
+Furnishings" is only 74% fuzzy but 0.97 semantic, so the reviewer gets the right suggestion.
+Without embeddings (degraded mode) only exact names and tax IDs are accepted.
 """
 from __future__ import annotations
 
@@ -15,7 +23,9 @@ from typing import Optional
 from rapidfuzz import fuzz
 
 from app.config import Settings, get_settings
-from app.rag.store import VENDORS, Vendor, get_index, load_vendors, normalize_name, normalize_tax_id
+from app.rag.store import (
+    VENDORS, Vendor, base_name, get_index, load_vendors, normalize_name, normalize_tax_id,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -101,16 +111,15 @@ def match_vendor(name: Optional[str], tax_id: Optional[str] = None,
     if index is not None and name:
         try:
             sync_learned_aliases(settings)
-            for hit in index.query(VENDORS, name, k=8):
+            for hit in index.query(VENDORS, name, k=15):
                 vid = hit["metadata"]["vendor_id"]
                 entry = candidate_ids.setdefault(vid, {})
                 entry["semantic"] = max(entry.get("semantic", 0.0), hit["similarity"])
             method = "semantic+fuzzy"
         except Exception as exc:
             logger.warning("Vector retrieval failed; lexical fallback", extra={"error": str(exc)})
-            index = None
-    if index is None and name:
-        for v in registry:  # small registry: score everything
+    if name:
+        for v in registry:  # small registry: fuzzy-score everything, retrieved or not
             candidate_ids.setdefault(v.vendor_id, {})
 
     scored = []
@@ -118,20 +127,27 @@ def match_vendor(name: Optional[str], tax_id: Optional[str] = None,
         v = by_id.get(vid)
         if v is None:
             continue
-        fuzzy, best_alias = 0.0, v.name
+        fuzzy, best_alias, exact = 0.0, v.name, False
         if name:
+            exact = base_name(name) in {base_name(a) for a in v.all_names}
             for alias in v.all_names:
                 s = name_similarity(name, alias)
                 if s > fuzzy:
                     fuzzy, best_alias = s, alias
+        sem_ok = (info.get("semantic") or 0.0) >= settings.vendor_semantic_min
         score = fuzzy
+        if sem_ok:  # a convincing embedding lifts a weak string match into the review band, never above it
+            score = max(score, settings.vendor_match_medium)
         if info.get("tax_id"):
             # tax ID is identity evidence; a very different name still needs a human look
-            score = max(fuzzy, 95.0) if fuzzy >= 50 else max(fuzzy, 80.0)
+            score = max(score, 95.0) if fuzzy >= 50 else max(score, 80.0)
+        accepted = exact or (bool(info.get("tax_id")) and fuzzy >= 50) or \
+            (fuzzy >= settings.vendor_match_high and sem_ok)
         scored.append({"vendor_id": vid, "canonical_name": v.name, "matched_alias": best_alias,
                        "vendor_status": v.status, "score": round(score, 1), "fuzzy": round(fuzzy, 1),
-                       "semantic": info.get("semantic"), "tax_id_match": bool(info.get("tax_id"))})
-    scored.sort(key=lambda c: c["score"], reverse=True)
+                       "semantic": info.get("semantic"), "tax_id_match": bool(info.get("tax_id")),
+                       "exact": exact, "accepted": accepted})
+    scored.sort(key=lambda c: (c["exact"], c["accepted"], c["score"]), reverse=True)
     top = scored[:3]
 
     if not scored or scored[0]["score"] < settings.vendor_match_medium:
@@ -148,15 +164,21 @@ def match_vendor(name: Optional[str], tax_id: Optional[str] = None,
 
     second = next((c for c in scored[1:] if c["vendor_id"] != best["vendor_id"]), None)
     if second and second["score"] >= settings.vendor_match_medium and \
-            best["score"] - second["score"] < settings.vendor_ambiguity_margin and not best["tax_id_match"]:
+            best["score"] - second["score"] < settings.vendor_ambiguity_margin and \
+            not best["tax_id_match"] and not best["exact"]:
         status = "ambiguous"
         reason = (f"'{name}' matches both {best['canonical_name']} ({best['score']}) and "
                   f"{second['canonical_name']} ({second['score']})")
-    elif best["score"] >= settings.vendor_match_high:
-        status, reason = "matched", f"Matched '{name}' to {vendor.name} via '{best['matched_alias']}' ({best['score']})"
+    elif best["accepted"]:
+        how = "exact name" if best["exact"] else ("tax ID + name" if best["tax_id_match"] else "fuzzy + semantic")
+        status, reason = "matched", (f"Matched '{name}' to {vendor.name} via '{best['matched_alias']}' "
+                                     f"({how}, {best['score']})")
     else:
         status = "uncertain"
-        reason = f"Weak match '{name}' -> {vendor.name} ({best['score']}, below {settings.vendor_match_high})"
+        sem = f"{best['semantic']:.2f}" if best["semantic"] is not None else "not available"
+        reason = (f"Possible match '{name}' -> {vendor.name}, not certain enough to accept: string similarity "
+                  f"{best['fuzzy']:g} (need {settings.vendor_match_high:g}), semantic similarity {sem} "
+                  f"(need {settings.vendor_semantic_min:g})")
 
     return {"status": status, "vendor_id": vendor.vendor_id, "canonical_name": vendor.name,
             "vendor_status": vendor.status, "score": best["score"], "method": method,

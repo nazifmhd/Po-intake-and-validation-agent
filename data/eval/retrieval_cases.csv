@@ -1,0 +1,76 @@
+split,kind,query,expected
+dev,product,Notebook computer 14in 16GB memory 512GB solid state drive,IT-LAP-14P
+dev,product,Sit-stand electric desk 140 x 70,OFF-DSK-ADJ
+dev,product,Swivel task chair with mesh back and lower back support,OFF-CHR-ERG
+dev,product,USB headphones with active noise cancellation and microphone,IT-HDS-ANC
+dev,product,Protective construction helmet with ratchet suspension,SAF-HLM-HRD
+dev,product,Disposable nitrile exam gloves 100 count,SAF-GLV-NIT
+dev,product,Hi-vis reflective waistcoat class 2,SAF-VST-HV
+dev,product,Cordless 18 volt drill kit with battery,TLS-DRL-18V
+dev,product,Cardboard shipping cartons medium size pack of 25,PKG-BOX-M
+dev,product,Wireless access point WiFi6 ceiling mounted,IT-AP-WF6
+dev,product,Laser printer toner black high capacity,OFF-TNR-BLK
+dev,product,Gold plated espresso machine,
+dev,product,Annual office cleaning service contract,
+dev,product,Ergonomic footrest with massage surface,
+dev,product,A3 colour laser printer,
+dev,product,Safety harness for working at height,
+dev,product,Laptop carrying backpack 15 inch,
+dev,product,Server rack 42U with cooling fans,
+dev,product,Copper plumbing pipe 22mm,
+dev,product,Whiteboard marker pens assorted colours,
+test,product,27in 2560x1440 computer display,IT-MON-27Q
+test,product,Dual monitor USB Type-C dock,IT-DCK-USC
+test,product,Cordless keyboard & mouse set,IT-KBM-WLS
+test,product,Gigabit ethernet switch 24 ports managed,IT-SWT-24P
+test,product,Network patch lead category 6A two metres,IT-CBL-C6A
+test,product,Steel file cabinet with four drawers,OFF-FIL-4DR
+test,product,Dimmable LED table lamp for desk,OFF-LMP-LED
+test,product,Fog-resistant protective eyewear goggles,SAF-GOG-AF
+test,product,Stretch film for wrapping pallets 18 inch,PKG-PLT-WRP
+test,product,Clear parcel tape 48mm 100 metres six rolls,PKG-TAP-48
+test,product,Single pole 20 amp breaker,ELE-BRK-20A
+test,product,Fluorescent replacement LED tube T8 four foot 18 watt,ELE-LED-T8
+test,product,Sterile filter pipette tips 200 microlitre 96 per rack,LAB-PIP-TIP
+test,product,All-purpose concentrated cleaning liquid 5 litre,JAN-CLN-MP
+test,product,Team building workshop for 20 people,
+test,product,Desktop tower PC with 32GB RAM,
+test,product,Hydraulic pallet jack 2500kg,
+test,product,Wired optical mouse,
+test,product,Leather executive boardroom table,
+test,product,Cut-resistant kevlar gloves,
+test,product,Extension cord reel 25m,
+test,product,Pneumatic nail gun,
+test,product,Photocopier maintenance kit,
+test,product,LED floodlight 200W outdoor,
+dev,vendor,Acme Industrial Supply,V001
+dev,vendor,Northwind Office Prods LLC,V002
+dev,vendor,Globex Technologies Solutions,V003
+dev,vendor,Brightline Electric Components Ltd,V006
+dev,vendor,Shadow Supply Trading Co,V015
+dev,vendor,Contoso Facility Service,V008
+dev,vendor,Pinnacle Promo Goods Ltd,
+dev,vendor,Summit Office Products LLC,
+dev,vendor,Apex Industrial Supplies Inc,
+dev,vendor,Global Tech Systems,
+test,vendor,Harbour Packaging,V007
+test,vendor,Umbra Safety Equipments Company,V005
+test,vendor,Fabrikam Furnishings,V009
+test,vendor,Proseware Laboratories,V013
+test,vendor,AdventureWorks Tool Co,V014
+test,vendor,Tailspin Freight & Logistics,V010
+test,vendor,The Shadow Supplies Traders,V015
+test,vendor,Evergreen Packaging Solutions,
+test,vendor,Beacon Safety Equipment Co,
+test,vendor,Northgate Office Furniture,
+test,vendor,Redwood Paper Co.,
+dev,policy,Who has to sign off on a fourteen thousand dollar order?,Auto-approval threshold and sign-off
+dev,policy,Can we pay the supplier 90 days after delivery?,Allowed payment terms
+dev,policy,The buyer broke one big purchase into several small ones,Single-PO spend limit
+dev,policy,The supplier has never been onboarded,Approved vendors
+test,policy,The unit cost is a third more than we normally pay,Pricing and catalog compliance
+test,policy,The order is in euros,Currency
+test,policy,Numbers at the bottom of the page do not add up,Arithmetic integrity
+test,policy,No requested arrival date was given,Required fields
+test,policy,Do we need to tag laptops as company assets?,Restricted categories
+test,policy,Cash up front is requested,Allowed payment terms
