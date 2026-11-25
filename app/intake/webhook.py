@@ -3,6 +3,9 @@
 mailgun   HMAC-SHA256(signing_key, timestamp + token) == signature, timestamp fresh, token never reused
 sendgrid  Inbound Parse has no payload signature -> shared secret in the configured URL (?token=...)
 generic   X-Webhook-Secret header (used by the n8n workflow and scripts/simulate_webhook.py)
+
+Only WEBHOOK_PROVIDER (plus WEBHOOK_EXTRA_PROVIDERS) is accepted: otherwise ?provider= would let a caller
+pick whichever check is easiest to pass. Placeholder secrets from .env.example count as not configured.
 """
 from __future__ import annotations
 
@@ -43,12 +46,18 @@ class _ReplayCache:
                 self._seen.popitem(last=False)
             return False
 
+    def forget(self, token: str) -> None:
+        """The request was not handled after all; the provider's retry carries the same token."""
+        with self._lock:
+            self._seen.pop(token, None)
+
 
 replay_cache = _ReplayCache()
 
 
 def verify_mailgun(timestamp: str, token: str, signature: str, settings: Settings) -> None:
-    if not settings.mailgun_signing_key:
+    key = settings.real_secret(settings.mailgun_signing_key)
+    if not key:
         raise WebhookAuthError("MAILGUN_SIGNING_KEY is not configured")
     if not (timestamp and token and signature):
         raise WebhookAuthError("missing Mailgun signature fields")
@@ -58,17 +67,18 @@ def verify_mailgun(timestamp: str, token: str, signature: str, settings: Setting
         raise WebhookAuthError("invalid timestamp") from exc
     if age > settings.webhook_max_age_seconds:
         raise WebhookAuthError(f"stale webhook (timestamp {age:.0f}s old)")
-    expected = hmac.new(settings.mailgun_signing_key.encode(), f"{timestamp}{token}".encode(), hashlib.sha256).hexdigest()
-    if not hmac.compare_digest(expected, signature):
+    expected = hmac.new(key.encode(), f"{timestamp}{token}".encode(), hashlib.sha256).hexdigest()
+    if not hmac.compare_digest(expected.encode(), signature.encode()):
         raise WebhookAuthError("invalid Mailgun signature")
     if replay_cache.seen_before(token, settings.webhook_max_age_seconds):
         raise WebhookAuthError("replayed webhook token")
 
 
 def verify_shared_secret(provided: str | None, settings: Settings) -> None:
-    if not settings.webhook_shared_secret:
+    secret = settings.real_secret(settings.webhook_shared_secret)
+    if not secret:
         raise WebhookAuthError("WEBHOOK_SHARED_SECRET is not configured")
-    if not provided or not hmac.compare_digest(provided, settings.webhook_shared_secret):
+    if not provided or not hmac.compare_digest(provided.encode(), secret.encode()):
         raise WebhookAuthError("invalid webhook secret")
 
 
@@ -87,6 +97,8 @@ async def _attachments(form) -> list[InboundAttachment]:
 
 
 async def parse_inbound(provider: str, form, headers, query, settings: Settings) -> InboundEmail:
+    if provider not in settings.enabled_webhook_providers:
+        raise WebhookAuthError(f"provider '{provider}' is not enabled")
     if provider == "mailgun":
         verify_mailgun(form.get("timestamp", ""), form.get("token", ""), form.get("signature", ""), settings)
         return InboundEmail(

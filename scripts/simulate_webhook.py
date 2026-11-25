@@ -36,6 +36,8 @@ def main() -> None:
     ap.add_argument("--bad-signature", action="store_true")
     args = ap.parse_args()
     s = get_settings()
+    if not s.real_secret(s.mailgun_signing_key if args.provider == "mailgun" else s.webhook_shared_secret):
+        sys.exit("No webhook secret configured - run: python scripts/init_env.py")
 
     message_id = args.message_id or f"<{uuid.uuid4().hex}@mail.northbridge.example>"
     files = []

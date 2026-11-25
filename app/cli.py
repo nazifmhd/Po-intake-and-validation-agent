@@ -54,7 +54,7 @@ def main() -> None:
         result = accept_email(email, settings)
         options = {"rag_enabled": False} if args.no_rag else None
         out = result.as_dict()
-        out["results"] = [run_job(j, result.message_id, options=options, settings=settings) for j in result.jobs]
+        out["results"] = [run_job(j, result.message_id, options=options, settings=settings, worker="cli") for j in result.jobs]
         for r in out["results"]:
             r.pop("trace", None)
         print(json.dumps(out, indent=2, default=str))

@@ -4,7 +4,8 @@
     python -m app.intake.imap_poller --once   # single pass
 
 Unread messages are processed and then marked \\Seen. Dedup on Message-ID still applies, so a
-crash between processing and marking seen can't create duplicates on the next pass.
+crash between processing and marking seen can't create duplicates on the next pass - and the
+job sweeper finishes whatever the crash interrupted.
 """
 from __future__ import annotations
 
@@ -36,13 +37,15 @@ def poll_once(settings: Settings | None = None) -> list[dict]:
                 source="imap",
             )
             try:
-                out = process_email(email, settings)
+                out = process_email(email, settings, worker="imap")
                 results.append(out)
                 logger.info("IMAP message processed", extra={"message_id": out["message_id"], "status": out["status"],
                                                              "jobs": len(out["jobs"])})
             except Exception:
                 logger.exception("IMAP message failed; leaving it unread for the next pass",
                                  extra={"uid": msg.uid})
+                continue
+            if out["status"] == "in_progress":  # another process holds the claim; decide on the next pass
                 continue
             mailbox.flag(msg.uid, "\\Seen", True)
     return results
@@ -62,6 +65,9 @@ def main() -> None:
         poll_once(settings)
         return
 
+    from app.intake.common import requeue_own_jobs, sweep_jobs
+    requeue_own_jobs("imap", settings)
+
     from apscheduler.schedulers.blocking import BlockingScheduler
 
     def job():
@@ -69,6 +75,10 @@ def main() -> None:
             poll_once(settings)
         except Exception:
             logger.exception("IMAP poll failed")
+        try:
+            sweep_jobs("imap", settings)
+        except Exception:
+            logger.exception("Job sweep failed")
 
     scheduler = BlockingScheduler()
     scheduler.add_job(job, "interval", seconds=settings.imap_poll_seconds, max_instances=1, coalesce=True,
