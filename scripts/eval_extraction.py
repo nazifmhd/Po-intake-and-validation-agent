@@ -77,12 +77,14 @@ def main() -> None:
     import logging
     logging.disable(logging.ERROR)
     from app.config import get_settings
-    from app.extraction.extractor import extract
+    from app.extraction.schema import PurchaseOrder
     from app.graph.build import run_pipeline
-    from app.ingestion.loaders import load_document
     from app.intake.common import split_csv_batch
 
+    from app.rag.ingest_kb import build_knowledge_base
+
     settings = get_settings()
+    build_knowledge_base(settings, if_missing=True)
     samples = Path(args.samples)
     print(f"LLM provider: {settings.llm_provider} | embeddings: {settings.embedding_provider}\n")
     print(f"{'document':34s} {'fields':>9s} {'acc':>6s}  {'routing':8s} decision / flags")
@@ -103,28 +105,35 @@ def main() -> None:
             units.append((label_path.stem, src, label))
 
         for name, path, lab in units:
-            try:
-                po = extract(load_document(path, tmp / "pages" / name))
-                ok, total, misses = score_po(lab, po)
-            except Exception as exc:
-                ok, total, misses = 0, len(lab["fields"]) + 4 * len(lab["line_items"]), [f"extraction failed: {exc}"]
+            out = run_pipeline(str(path))
+            if out.get("po"):
+                ok, total, misses = score_po(lab, PurchaseOrder.model_validate(out["po"]))
+            else:
+                ok, total = 0, len(lab["fields"]) + 4 * len(lab["line_items"])
+                misses = [f"extraction failed: {out.get('errors')}"]
             grand_ok += ok
             grand_total += total
 
-            out = run_pipeline(str(path))
             exp = lab["expected"]
+            if settings.embedding_provider == "none":  # degraded mode is stricter, by design
+                exp = lab.get("expected_lexical", exp)
             routed = out["decision"] == exp["decision"] and set(out["flags"] or []) == set(exp["flags"])
             route_ok += routed
             route_total += 1
             print(f"{name:34s} {ok:>4d}/{total:<4d} {ok / total:6.0%}  {'PASS' if routed else 'FAIL':8s} "
                   f"{out['decision']} {out['flags']}" + ("" if routed else f"  (expected {exp['decision']} {exp['flags']})"))
             if args.verbose:
-                for m in misses:
+                why = [] if routed else [f"{k}: {v}" for k, v in (out.get("reasons") or {}).items()]
+                for m in misses + why:
                     print(f"      - {m}")
 
     print("-" * 100)
     print(f"Field accuracy:   {grand_ok}/{grand_total} = {grand_ok / grand_total:.1%}")
     print(f"Routing accuracy: {route_ok}/{route_total} = {route_ok / route_total:.1%}")
+    from app.llm import USAGE
+    if USAGE["calls"]:
+        print(f"LLM usage:        {USAGE['calls']} calls, {USAGE['input_tokens']:,} input + "
+              f"{USAGE['output_tokens']:,} output tokens")
 
 
 if __name__ == "__main__":

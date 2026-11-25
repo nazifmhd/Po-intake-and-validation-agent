@@ -80,7 +80,7 @@ def test_mixed_email_multiple_attachments(samples):
 @pytest.fixture
 def client():
     from app.main import app
-    with TestClient(app) as c:
+    with TestClient(app, headers={"X-API-Key": "test-api-key"}) as c:
         yield c
 
 

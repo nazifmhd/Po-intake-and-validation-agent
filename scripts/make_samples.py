@@ -12,6 +12,10 @@ Eval extras:
   06_math_error.pdf             printed total doesn't add up                             -> math_mismatch
   07_bad_terms.pdf              Net 90 payment terms                                     -> noncompliant_terms
   08_csv_batch.csv              two POs in one CSV (batch split at intake)               -> auto_approve x2
+  09_no_sku_paraphrased.csv     no SKUs, item descriptions in the buyer's own words      -> auto_approve (needs embeddings)
+  10_lookalike_vendor.pdf       "Apex Industrial Supplies Inc" - 92% string-similar to approved vendor Acme
+                                Industrial Supplies Inc., but a different company        -> vendor_low_match
+  11_negative_line.csv          a credit line pulls $18,500 of laptops under the limit   -> invalid_amount
 Edge cases (error handling):
   edge_corrupt.pdf, edge_locked.pdf (password-protected), edge_unsupported.zip
 """
@@ -105,6 +109,34 @@ SAMPLES = [
         "tax": 187.20, "tax_label": "Sales Tax (8%)", "shipping": 0.00,
         "expected": {"decision": "needs_review", "flags": ["noncompliant_terms"]},
     },
+    {
+        "id": "09_no_sku_paraphrased", "kind": "csv", "po_number": "PO-2026-0461", "po_date": "2026-10-27",
+        "vendor": "Umbra Safety", "tax_id": "", "dept": "Plant Maintenance", "currency": "USD",
+        "terms": "Net 30", "delivery": "2026-11-12",
+        "lines": [("", "Fog-resistant protective eyewear goggles", 60, "EA", 9.75),
+                  ("", "Hi-vis reflective waistcoat class 2", 40, "EA", 11.50)],
+        "tax": 83.60, "shipping": 25.00,
+        "expected": {"decision": "auto_approve", "flags": []},
+        "expected_lexical": {"decision": "needs_review", "flags": ["unknown_item"]},
+    },
+    {
+        "id": "10_lookalike_vendor", "kind": "pdf", "po_number": "PO-2026-0468", "po_date": "2026-10-28",
+        "vendor": "Apex Industrial Supplies Inc", "vendor_addr": ["5 Foundry Rd", "Cleveland, OH 44113"],
+        "tax_id": "", "dept": "Plant Maintenance", "currency": "USD", "terms": "Net 30", "delivery": "2026-11-12",
+        "lines": [("TLS-SET-SKT", "Socket set 94-piece metric/SAE", 8, "SET", 119.00),
+                  ("ELE-CBL-12G", "12 AWG copper building wire 100ft spool", 10, "SPL", 78.00)],
+        "tax": 138.56, "tax_label": "Sales Tax (8%)", "shipping": 40.00,
+        "expected": {"decision": "needs_review", "flags": ["vendor_low_match"]},
+    },
+    {
+        "id": "11_negative_line", "kind": "csv", "po_number": "PO-2026-0472", "po_date": "2026-11-20",
+        "vendor": "Globex Technology Solutions Inc.", "tax_id": "US-34-5678901", "dept": "IT", "currency": "USD",
+        "terms": "Net 30", "delivery": "2026-12-02",
+        "lines": [("IT-LAP-14P", "14-inch business laptop 16GB RAM 512GB SSD", 10, "EA", 1850.00),
+                  ("IT-MON-27Q", "27-inch QHD monitor", -30, "EA", 310.00)],
+        "tax": 0.00, "shipping": 0.00,
+        "expected": {"decision": "needs_review", "flags": ["invalid_amount"]},
+    },
 ]
 
 BATCH = {
@@ -174,7 +206,7 @@ def render_po_pdf(spec: dict, path: Path) -> None:
     hdr_left = [("PO Number", spec["po_number"]), ("PO Date", spec["po_date"]), ("Department", spec["dept"]),
                 ("Currency", spec["currency"]), ("Payment Terms", spec["terms"]),
                 ("Delivery Date", spec["delivery"])]
-    hdr_vendor = [("Vendor", spec["vendor"]), ("Tax ID", spec["tax_id"])] + \
+    hdr_vendor = [("Vendor", spec["vendor"])] + ([("Tax ID", spec["tax_id"])] if spec["tax_id"] else []) + \
                  [("", a) for a in spec.get("vendor_addr", [])]
     if spec.get("two_column"):
         for i in range(max(len(hdr_left), len(hdr_vendor))):
@@ -291,7 +323,8 @@ def label_for(spec: dict, file: str) -> dict:
             "payment_terms": spec["terms"], "delivery_date": spec["delivery"] or None,
             "subtotal": subtotal, "tax": spec["tax"], "shipping": spec["shipping"], "total": total,
         },
-        "line_items": [{"sku": s, "quantity": q, "unit_price": p, "line_total": round(q * p, 2)}
+        **({"expected_lexical": spec["expected_lexical"]} if "expected_lexical" in spec else {}),
+        "line_items": [{"sku": s or None, "quantity": q, "unit_price": p, "line_total": round(q * p, 2)}
                        for s, _, q, _, p in spec["lines"]],
     }
 

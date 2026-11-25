@@ -33,6 +33,9 @@ def isolated_env(tmp_path, monkeypatch):
         "ALLOWED_SENDER_DOMAINS": "",
         "MAILGUN_SIGNING_KEY": "test-signing-key",
         "WEBHOOK_SHARED_SECRET": "test-shared-secret",
+        "WEBHOOK_PROVIDER": "mailgun",
+        "WEBHOOK_EXTRA_PROVIDERS": "generic",
+        "API_KEY": "test-api-key",
         "LOG_JSON": "false",
     }
     for k, v in env.items():

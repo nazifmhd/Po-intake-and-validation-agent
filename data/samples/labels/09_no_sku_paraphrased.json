@@ -1,0 +1,41 @@
+{
+  "file": "09_no_sku_paraphrased.csv",
+  "expected": {
+    "decision": "auto_approve",
+    "flags": []
+  },
+  "fields": {
+    "po_number": "PO-2026-0461",
+    "po_date": "2026-10-27",
+    "vendor_name": "Umbra Safety",
+    "vendor_tax_id": null,
+    "buyer_department": "Plant Maintenance",
+    "currency": "USD",
+    "payment_terms": "Net 30",
+    "delivery_date": "2026-11-12",
+    "subtotal": 1045.0,
+    "tax": 83.6,
+    "shipping": 25.0,
+    "total": 1153.6
+  },
+  "expected_lexical": {
+    "decision": "needs_review",
+    "flags": [
+      "unknown_item"
+    ]
+  },
+  "line_items": [
+    {
+      "sku": null,
+      "quantity": 60,
+      "unit_price": 9.75,
+      "line_total": 585.0
+    },
+    {
+      "sku": null,
+      "quantity": 40,
+      "unit_price": 11.5,
+      "line_total": 460.0
+    }
+  ]
+}

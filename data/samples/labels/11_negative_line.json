@@ -1,0 +1,37 @@
+{
+  "file": "11_negative_line.csv",
+  "expected": {
+    "decision": "needs_review",
+    "flags": [
+      "invalid_amount"
+    ]
+  },
+  "fields": {
+    "po_number": "PO-2026-0472",
+    "po_date": "2026-11-20",
+    "vendor_name": "Globex Technology Solutions Inc.",
+    "vendor_tax_id": "US-34-5678901",
+    "buyer_department": "IT",
+    "currency": "USD",
+    "payment_terms": "Net 30",
+    "delivery_date": "2026-12-02",
+    "subtotal": 9200.0,
+    "tax": 0.0,
+    "shipping": 0.0,
+    "total": 9200.0
+  },
+  "line_items": [
+    {
+      "sku": "IT-LAP-14P",
+      "quantity": 10,
+      "unit_price": 1850.0,
+      "line_total": 18500.0
+    },
+    {
+      "sku": "IT-MON-27Q",
+      "quantity": -30,
+      "unit_price": 310.0,
+      "line_total": -9300.0
+    }
+  ]
+}

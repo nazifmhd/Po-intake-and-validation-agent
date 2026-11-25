@@ -1,0 +1,3 @@
+po_number,po_date,vendor_name,vendor_tax_id,buyer_department,currency,payment_terms,delivery_date,line_no,sku,description,quantity,unit,unit_price,line_total,subtotal,tax,shipping,total
+PO-2026-0472,2026-11-20,Globex Technology Solutions Inc.,US-34-5678901,IT,USD,Net 30,2026-12-02,1,IT-LAP-14P,14-inch business laptop 16GB RAM 512GB SSD,10,EA,1850.00,18500.00,9200.00,0.00,0.00,9200.00
+PO-2026-0472,2026-11-20,Globex Technology Solutions Inc.,US-34-5678901,IT,USD,Net 30,2026-12-02,2,IT-MON-27Q,27-inch QHD monitor,-30,EA,310.00,-9300.00,,,,
