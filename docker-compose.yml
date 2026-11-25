@@ -23,6 +23,8 @@ services:
     command: ["streamlit", "run", "review_ui/app.py", "--server.port=8501", "--server.address=0.0.0.0", "--server.headless=true"]
     ports:
       - "127.0.0.1:8501:8501"
+    environment:
+      API_BASE_URL: http://api:8000
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://localhost:8501/_stcore/health"]
       interval: 15s

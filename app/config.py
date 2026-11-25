@@ -78,6 +78,7 @@ class Settings(BaseSettings):
     allowed_sender_domains: str = ""
     api_key: str = ""                        # X-API-Key for every non-webhook endpoint; empty = those are disabled
     review_ui_password: str = ""
+    api_base_url: str = "http://localhost:8000"   # where the review UI finds the API
     imap_host: str = "imap.gmail.com"
     imap_port: int = 993
     imap_user: str = ""
