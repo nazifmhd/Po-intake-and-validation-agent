@@ -21,6 +21,21 @@ _AUDIT_TRIGGERS = [
 ]
 
 
+def _add_missing_columns(conn) -> None:
+    """Databases created by an earlier version keep working: add columns that were introduced since."""
+    for table in SQLModel.metadata.sorted_tables:
+        have = {row[1] for row in conn.execute(text(f"PRAGMA table_info({table.name})"))}
+        for col in table.columns:
+            if col.name in have:
+                continue
+            kind = col.type.compile(dialect=conn.dialect)
+            default = "" if col.nullable else (" NOT NULL DEFAULT 0" if kind in ("INTEGER", "FLOAT") else
+                                               " NOT NULL DEFAULT '{}'")
+            conn.execute(text(f"ALTER TABLE {table.name} ADD COLUMN {col.name} {kind}{default}"))
+            for index in (i for i in table.indexes if col.name in i.columns):
+                index.create(conn, checkfirst=True)
+
+
 def get_engine(settings: Settings | None = None):
     settings = settings or get_settings()
     url = settings.resolved_database_url
@@ -40,6 +55,7 @@ def get_engine(settings: Settings | None = None):
         SQLModel.metadata.create_all(engine)
         if url.startswith("sqlite"):
             with engine.begin() as conn:
+                _add_missing_columns(conn)
                 for ddl in _AUDIT_TRIGGERS:
                     conn.execute(text(ddl))
         _engines[url] = engine

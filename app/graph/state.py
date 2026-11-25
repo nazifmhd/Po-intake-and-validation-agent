@@ -10,13 +10,16 @@ class POState(TypedDict, total=False):
     job_id: str
     file_path: str
     source_message_id: Optional[str]
+    exclude_review_id: Optional[int]      # set when re-evaluating a queued item
     options: dict                         # per-run overrides, e.g. {"rag_enabled": False} for the ablation
 
     # --- ingest ---
-    doc_type: Optional[str]               # pdf_text | pdf_scanned | image | csv
+    doc_type: Optional[str]               # pdf_text | pdf_mixed | pdf_scanned | image | csv
     raw_text: Optional[str]
-    text_source: Optional[str]            # text_layer | ocr | csv | none
+    text_source: Optional[str]            # text_layer | mixed | ocr | csv | none
     page_images: list[str]
+    vision_images: list[str]              # the pages the model must look at
+    ingest_flags: dict                    # problems with the document itself: code -> reason
     csv_rows: list[dict]
     ingest_warnings: list[str]
 

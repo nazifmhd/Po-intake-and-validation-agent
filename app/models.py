@@ -17,6 +17,8 @@ class PurchaseOrderRecord(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     job_id: str = Field(index=True)
     po_number: Optional[str] = Field(default=None, index=True)
+    # normalized PO number; UNIQUE so concurrent workers can't file the same PO twice. NULL once superseded.
+    po_key: Optional[str] = Field(default=None, index=True, unique=True)
     po_date: Optional[str] = None
     vendor_name_raw: Optional[str] = None
     vendor_id: Optional[str] = Field(default=None, index=True)
@@ -29,7 +31,7 @@ class PurchaseOrderRecord(SQLModel, table=True):
     total: Optional[float] = None
     payment_terms: Optional[str] = None
     delivery_date: Optional[str] = None
-    status: str = "approved"  # approved | approved_by_review
+    status: str = "approved"  # approved | approved_by_review | superseded
     overall_confidence: float = 0.0
     source_file: str = ""
     source_message_id: Optional[str] = None
@@ -75,6 +77,9 @@ class ReviewQueueItem(SQLModel, table=True):
     price_checks_json: str = "[]"
     policy_findings_json: str = "[]"
     errors_json: str = "[]"
+    ingest_flags_json: str = "{}"
+    duplicate_json: str = "{}"
+    original_json: str = "{}"  # what was extracted, before any reviewer correction
     source_file: str = ""
     doc_type: Optional[str] = None
     source_message_id: Optional[str] = None
@@ -109,7 +114,7 @@ class ProcessedEmail(SQLModel, table=True):
     subject: Optional[str] = None
     source: str = "webhook"  # webhook | imap | upload | cli
     attachment_count: int = 0
-    status: str = "accepted"  # accepted | no_attachment | rejected_sender | all_rejected
+    status: str = "received"  # received | accepted | no_attachment | rejected_sender | all_rejected | intake_failed
     note: Optional[str] = None
     received_at: datetime = Field(default_factory=utcnow)
 
@@ -128,7 +133,10 @@ class Job(SQLModel, table=True):
     status: str = "queued"  # queued | processing | done | rejected | failed
     decision: Optional[str] = None
     note: Optional[str] = None
+    attempts: int = 0
+    worker: Optional[str] = None  # api | imap | cli - who is processing it
     created_at: datetime = Field(default_factory=utcnow)
+    started_at: Optional[datetime] = None
     finished_at: Optional[datetime] = None
 
 

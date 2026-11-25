@@ -52,6 +52,12 @@ def notify_review(po: Optional[dict], flags: list[str], reasons: dict, review_id
     )
 
 
+def notify_duplicate(po: dict, duplicate: dict, settings: Settings | None = None) -> bool:
+    po_no = (po.get("po_number") or {}).get("value") or "(unknown PO)"
+    return send_slack(f":repeat: *PO {po_no}* was received again with identical content - skipped "
+                      f"(already in {duplicate.get('table')} #{duplicate.get('id')})", settings)
+
+
 def notify_rejected_attachment(filename: str, reason: str, sender: Optional[str],
                                settings: Settings | None = None) -> bool:
     return send_slack(f":no_entry: Couldn't process attachment *{filename}* from {sender or 'unknown sender'}: {reason}",
