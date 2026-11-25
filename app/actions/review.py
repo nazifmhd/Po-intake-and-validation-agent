@@ -73,7 +73,11 @@ def _resolve_vendor(vendor_match: dict, override_id: Optional[str], settings: Se
             by_id[vendor_match["vendor_id"]].status == "blocked":
         raise ReviewError(f"{vendor_match.get('canonical_name')} is BLOCKED: this PO can only be rejected. If the "
                           "vendor name was misread, correct it first.")
-    vendor_id = override_id or vendor_match.get("vendor_id")
+    # an uncertain or ambiguous match is a suggestion: the reviewer has to name the record themselves
+    vendor_id = override_id or (vendor_match.get("vendor_id") if vendor_match.get("status") == "matched" else None)
+    if not vendor_id and vendor_match.get("vendor_id"):
+        raise ReviewError(f"'{vendor_match.get('canonical_name')}' is only a possible match. Choose the registry record "
+                          "yourself if you have confirmed it is the same company, or reject the PO.")
     if not vendor_id:
         raise ReviewError("The vendor is not in the approved registry. Choose the registry record it belongs to, "
                           "or reject the PO until the vendor is onboarded.")

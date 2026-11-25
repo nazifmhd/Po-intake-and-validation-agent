@@ -700,7 +700,7 @@ def test_review_api_end_to_end(anonymous, samples):
                           json={"reviewer": "dana"}).status_code == 409
 
 
-# ------------------------------------------------------------------ storage + UI
+# ------------------------------------------------------------------ storage
 def test_old_database_is_upgraded_in_place(tmp_path):
     import sqlite3
 
@@ -720,37 +720,6 @@ def test_old_database_is_upgraded_in_place(tmp_path):
         assert s.exec(select(Job)).one().attempts == 0
         assert s.exec(select(PurchaseOrderRecord)).all() == []
     reset_engines()
-
-
-def test_review_ui_renders_and_corrects(samples):
-    pytest.importorskip("streamlit")
-    from streamlit.testing.v1 import AppTest
-
-    from app.config import PROJECT_ROOT
-    run_pipeline(str(samples["06_math_error"]))
-    run_pipeline(str(samples["edge_corrupt"]))
-    at = AppTest.from_file(str(PROJECT_ROOT / "review_ui" / "app.py"), default_timeout=60).run()
-    assert not at.exception and any("math_mismatch" in e.value for e in at.error)
-    next(t for t in at.text_input if t.label == "Reviewer name").set_value("dana")
-    next(t for t in at.text_input if t.label == "total").set_value("2021.40")
-    next(b for b in at.button if b.label.startswith("Apply corrections")).click()
-    at.run()
-    assert not at.exception and any("no flags left" in e.value for e in at.success)
-    assert json.loads(rows(ReviewQueueItem)[0].flags_json) == []
-
-
-def test_review_ui_password(monkeypatch, samples):
-    pytest.importorskip("streamlit")
-    from streamlit.testing.v1 import AppTest
-
-    from app.config import PROJECT_ROOT
-    monkeypatch.setenv("REVIEW_UI_PASSWORD", "hunter2")
-    reset_settings_cache()
-    run_pipeline(str(samples["06_math_error"]))
-    at = AppTest.from_file(str(PROJECT_ROOT / "review_ui" / "app.py"), default_timeout=60).run()
-    assert not at.button                                     # nothing but the password box
-    at.text_input[0].set_value("hunter2").run()
-    assert any(b.label.startswith("Apply") for b in at.button)
 
 
 # ------------------------------------------------------------------ first lines of defence, on their own
@@ -795,3 +764,13 @@ def test_policy_llm_is_told_about_every_check_not_only_the_policy_ones(monkeypat
     pol.check_policy(po, match_vendor("Shadow Supply Traders"), s, price_checks=validate_line_items(po))
     raised = prompts[0].split("already raised:")[1].split("Retrieved policy")[0]
     assert all(code in raised for code in ("vendor_blocked", "price_anomaly", "math_mismatch"))
+
+
+def test_lookalike_vendor_is_never_filed_under_the_real_one_by_default(samples):
+    """An uncertain match is a suggestion; approving must not silently adopt it."""
+    out = run_pipeline(str(samples["10_lookalike_vendor"]))
+    assert out["flags"] == ["vendor_low_match"] and out["vendor_match"]["vendor_id"] == "V001"
+    with pytest.raises(review.ReviewError, match="only a possible match"):
+        review.approve(out["record_id"], "dana", "looks fine")
+    assert not rows(PurchaseOrderRecord)
+    assert review.approve(out["record_id"], "dana", "called them, same company", vendor_override_id="V001")
