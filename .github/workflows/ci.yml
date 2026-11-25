@@ -1,0 +1,42 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends tesseract-ocr
+      - run: pip install -e ".[dev]" -c constraints.txt
+      - name: Tests (offline - no API key)
+        run: pytest
+      - name: Offline evaluation and ablation
+        env:
+          LLM_PROVIDER: heuristic
+          POLICY_LLM_REVIEW: "false"
+        run: |
+          python scripts/eval_retrieval.py
+          python scripts/ablation.py
+          python scripts/eval_extraction.py
+
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Clean clone comes up
+        run: |
+          python3 scripts/init_env.py
+          sed -i 's/^LLM_PROVIDER=.*/LLM_PROVIDER=heuristic/' .env
+          docker compose up --build -d --wait --wait-timeout 300
+          curl -fsS http://localhost:8000/health
+          curl -fsS http://localhost:8501/_stcore/health

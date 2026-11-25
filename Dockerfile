@@ -12,9 +12,12 @@ RUN apt-get update \
 
 WORKDIR /app
 
-COPY pyproject.toml README.md ./
+# dependencies first, pinned, so editing code doesn't reinstall them
+COPY pyproject.toml constraints.txt README.md ./
+RUN mkdir app && touch app/__init__.py \
+    && pip install ".[sheets]" -c constraints.txt \
+    && pip uninstall -y po-agent && rm -rf app build *.egg-info
 COPY app ./app
-RUN pip install ".[sheets]"
 
 COPY review_ui ./review_ui
 COPY data ./data

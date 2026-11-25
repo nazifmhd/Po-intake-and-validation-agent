@@ -17,7 +17,7 @@ class Settings(BaseSettings):
     # --- LLM ---
     llm_provider: Literal["anthropic", "openai", "heuristic"] = "anthropic"
     anthropic_api_key: str = ""
-    anthropic_model: str = "claude-opus-5-5"
+    anthropic_model: str = "claude-sonnet-5-5"
     anthropic_effort: Literal["low", "medium", "high", "xhigh", "max"] = "medium"
     anthropic_server_fallback: bool = True
     openai_api_key: str = ""
@@ -25,6 +25,7 @@ class Settings(BaseSettings):
     llm_max_retries: int = 4
     llm_timeout_seconds: float = 120.0
     extraction_validation_retries: int = 2
+    policy_max_tokens: int = 16_000
     policy_llm_review: bool = True
 
     # --- Embeddings / KB ---
@@ -36,6 +37,8 @@ class Settings(BaseSettings):
     rag_enabled: bool = True
 
     # --- Decision thresholds ---
+    # The limits written in policy.md are enforced; the values below are *caps* - whichever is stricter
+    # wins, so neither an edited policy nor an edited .env can silently loosen the other.
     critical_field_confidence_min: float = 0.80
     price_tolerance_pct: float = 10.0
     auto_approval_limit: float = 10_000.0
@@ -43,7 +46,12 @@ class Settings(BaseSettings):
     vendor_match_high: float = 90.0
     vendor_match_medium: float = 75.0
     vendor_ambiguity_margin: float = 5.0
+    vendor_semantic_min: float = 0.86       # calibrated on the dev split of data/eval/retrieval_cases.csv
     catalog_match_min: float = 80.0
+    catalog_ambiguity_margin: float = 5.0
+    catalog_semantic_min: float = 0.81      # calibrated on the dev split
+    catalog_semantic_margin: float = 0.08
+    po_split_window_days: int = 7
     arithmetic_abs_tolerance: float = 0.05
     arithmetic_rel_tolerance: float = 0.001
     allowed_payment_terms: str = "Net 30,Net 45,Net 60"
@@ -54,12 +62,22 @@ class Settings(BaseSettings):
     storage_dir: str = "storage"
     max_attachment_mb: float = 20.0
 
+    # --- Jobs ---
+    job_max_attempts: int = 3
+    job_queued_grace_seconds: int = 60       # queued longer than this = its background task was lost
+    job_stale_seconds: int = 900             # processing longer than this = its worker died
+    job_sweep_seconds: int = 30
+    intake_stale_seconds: int = 120          # an email claim older than this without jobs is taken over
+
     # --- Intake ---
     webhook_provider: Literal["mailgun", "sendgrid", "generic"] = "mailgun"
+    webhook_extra_providers: str = ""        # e.g. "generic" to also accept the n8n workflow
     mailgun_signing_key: str = ""
     webhook_shared_secret: str = ""
     webhook_max_age_seconds: int = 900
     allowed_sender_domains: str = ""
+    api_key: str = ""                        # X-API-Key for every non-webhook endpoint; empty = those are disabled
+    review_ui_password: str = ""
     imap_host: str = "imap.gmail.com"
     imap_port: int = 993
     imap_user: str = ""
@@ -92,6 +110,17 @@ class Settings(BaseSettings):
     @property
     def allowed_sender_domain_list(self) -> list[str]:
         return [d.strip().lower() for d in self.allowed_sender_domains.split(",") if d.strip()]
+
+    @property
+    def enabled_webhook_providers(self) -> set[str]:
+        extra = {p.strip().lower() for p in self.webhook_extra_providers.split(",") if p.strip()}
+        return {self.webhook_provider} | extra
+
+    @staticmethod
+    def real_secret(value: str) -> str:
+        """Placeholders copied from .env.example are public knowledge - treat them as not configured."""
+        v = (value or "").strip()
+        return "" if v.lower().startswith("change-me") else v
 
     def path(self, value: str) -> Path:
         p = Path(value)

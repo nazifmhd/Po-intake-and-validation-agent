@@ -1,9 +1,10 @@
 services:
   api:
     build: .
+    image: po-agent
     env_file: .env
     ports:
-      - "8000:8000"
+      - "127.0.0.1:8000:8000"   # reachable from this machine (and an ngrok tunnel), not from the network
     volumes:
       - ./storage:/app/storage
       - ./data:/app/data
@@ -17,10 +18,17 @@ services:
 
   review-ui:
     build: .
+    image: po-agent
     env_file: .env
     command: ["streamlit", "run", "review_ui/app.py", "--server.port=8501", "--server.address=0.0.0.0", "--server.headless=true"]
     ports:
-      - "8501:8501"
+      - "127.0.0.1:8501:8501"
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8501/_stcore/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
     volumes:
       - ./storage:/app/storage
       - ./data:/app/data
@@ -33,6 +41,7 @@ services:
   # Enable with:  docker compose --profile imap up
   imap-poller:
     build: .
+    image: po-agent
     env_file: .env
     command: ["python", "-m", "app.intake.imap_poller"]
     volumes:
