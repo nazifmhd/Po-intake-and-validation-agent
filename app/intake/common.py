@@ -56,6 +56,7 @@ class InboundEmail:
     subject: Optional[str]
     attachments: list[InboundAttachment] = field(default_factory=list)
     source: str = "webhook"
+    sender_verified: bool = True  # False when the mail server reported a forged From address
 
 
 @dataclass
@@ -192,12 +193,24 @@ def _record_email(message_id: str, status: str, note: str, settings: Settings) -
         s.add(row)
 
 
+def sender_allowed(sender: Optional[str], settings: Settings) -> bool:
+    """No list configured = everyone (the webhook signature is then the only gate)."""
+    domains, addresses = settings.allowed_sender_domain_list, settings.allowed_sender_list
+    addr = parseaddr(sender or "")[1].lower()
+    return not (domains or addresses) or addr in addresses or addr.rsplit("@", 1)[-1] in domains
+
+
 def _accept_claimed(email: InboundEmail, message_id: str, sender_addr: str, settings: Settings) -> IntakeResult:
     # --- verify source ---
-    allowed = settings.allowed_sender_domain_list
-    if allowed and sender_addr.rsplit("@", 1)[-1] not in allowed:
-        _record_email(message_id, "rejected_sender", f"sender domain not in allow-list: {sender_addr}", settings)
-        audit("email_rejected_sender", details={"message_id": message_id, "sender": sender_addr}, settings=settings)
+    reason = None
+    if not email.sender_verified:
+        reason = f"sender address looks forged (SPF/DKIM/DMARC failed): {sender_addr}"
+    elif not sender_allowed(sender_addr, settings):
+        reason = f"sender not in allow-list: {sender_addr}"
+    if reason:
+        _record_email(message_id, "rejected_sender", reason, settings)
+        audit("email_rejected_sender", details={"message_id": message_id, "sender": sender_addr, "reason": reason},
+              settings=settings)
         return IntakeResult(message_id, "rejected_sender")
 
     if not email.attachments:

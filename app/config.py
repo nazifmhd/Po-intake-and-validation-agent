@@ -75,7 +75,8 @@ class Settings(BaseSettings):
     mailgun_signing_key: str = ""
     webhook_shared_secret: str = ""
     webhook_max_age_seconds: int = 900
-    allowed_sender_domains: str = ""
+    allowed_sender_domains: str = ""         # company domains; never a public one such as gmail.com
+    allowed_senders: str = ""                # single addresses
     api_key: str = ""                        # X-API-Key for every non-webhook endpoint; empty = those are disabled
     review_ui_password: str = ""
     api_base_url: str = "http://localhost:8000"   # where the review UI finds the API
@@ -85,6 +86,15 @@ class Settings(BaseSettings):
     imap_password: str = ""
     imap_folder: str = "INBOX"
     imap_poll_seconds: int = 30
+    imap_since_days: int = 1                 # ignore older unread mail
+    imap_max_per_poll: int = 20
+
+    # --- Outgoing test mail (scripts/send_test_email.py and the review UI) ---
+    smtp_host: str = "smtp.gmail.com"
+    smtp_port: int = 587
+    smtp_user: str = ""
+    smtp_password: str = ""
+    test_email_to: str = ""                  # empty = IMAP_USER
 
     # --- Notifications ---
     slack_webhook_url: str = ""
@@ -111,6 +121,10 @@ class Settings(BaseSettings):
     @property
     def allowed_sender_domain_list(self) -> list[str]:
         return [d.strip().lower() for d in self.allowed_sender_domains.split(",") if d.strip()]
+
+    @property
+    def allowed_sender_list(self) -> list[str]:
+        return [a.strip().lower() for a in self.allowed_senders.split(",") if a.strip()]
 
     @property
     def enabled_webhook_providers(self) -> set[str]:

@@ -53,4 +53,4 @@ services:
       api:
         condition: service_healthy
     profiles: ["imap"]
-    restart: unless-stopped
+    restart: on-failure:5
