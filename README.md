@@ -112,7 +112,7 @@ More labelled files: `04` alias vendor + two-column header + lines split across 
 python scripts/init_env.py      # creates .env with generated secrets (standard library only)
 # put your key after ANTHROPIC_API_KEY= in .env   (or LLM_PROVIDER=openai + OPENAI_API_KEY)
 docker compose up --build       # API :8000, review UI :8501 (bound to localhost)
-docker compose --profile imap up   # also start the IMAP poller
+docker compose --profile imap up   # also start the Gmail / IMAP poller
 ```
 
 The API builds the knowledge base on first start and rebuilds it whenever the files in `data/seed/` change. The embedding model is downloaded once into `storage/models`.
@@ -124,9 +124,10 @@ python -m venv .venv && .venv\Scripts\activate         # Windows   (source .venv
 pip install -e ".[dev]" -c constraints.txt
 python scripts/init_env.py
 python -m app.cli kb build                              # 3 Chroma collections
+python -m app.cli check                                 # is everything configured working? (free)
 uvicorn app.main:app --port 8000                        # API + webhook
 streamlit run review_ui/app.py                          # review UI on :8501
-pytest                                                  # 205 tests, fully offline
+pytest                                                  # 219 tests, fully offline
 ```
 
 No API key? Set `LLM_PROVIDER=heuristic`. Text PDFs and CSVs then run end to end with a deterministic parser; scans go to review.
@@ -135,10 +136,18 @@ No API key? Set `LLM_PROVIDER=heuristic`. Text PDFs and CSVs then run end to end
 
 0. **From the browser:** open http://localhost:8501, page *Send a PO*. It posts a signed email to the webhook with one click (demo documents or your own file) and shows the agent working live.
 1. **Signed webhook, no domain needed:** `python scripts/simulate_webhook.py data/samples/01_clean_northwind.pdf` posts a correctly HMAC-signed Mailgun payload. Add `--bad-signature` to see the 401, or re-use `--message-id` to see dedup. In Docker: `docker compose exec api python scripts/simulate_webhook.py data/samples/01_clean_northwind.pdf`.
-2. **Real email → IMAP:** set `IMAP_*` (a dedicated Gmail inbox with an App Password), run the poller, then `python scripts/send_test_email.py data/samples/01_clean_northwind.pdf` (uses `SMTP_*`).
+2. **Real email → Gmail (IMAP):** see [Connecting Gmail](#connecting-gmail). Then just send the PO to that address from any mail client.
 3. **Real email → webhook:** point a Mailgun route at `https://<tunnel>/webhook/inbound-email?provider=mailgun` (e.g. `ngrok http 8000`). For SendGrid Inbound Parse set `WEBHOOK_PROVIDER=sendgrid` and use `…?provider=sendgrid&token=<WEBHOOK_SHARED_SECRET>`.
 
 Or skip email: `python -m app.cli process data/samples/01_clean_northwind.pdf`.
+
+### Connecting Gmail
+
+1. Use a dedicated Gmail account, turn on 2-Step Verification and create an [App Password](https://myaccount.google.com/apppasswords).
+2. In `.env`: `IMAP_USER`, `IMAP_PASSWORD` (the App Password) and `ALLOWED_SENDERS` (the addresses that send POs). Optionally `IMAP_FOLDER=<Gmail label>`.
+3. `docker compose exec api python -m app.cli check` verifies the sign-in, then `docker compose --profile imap up -d` starts the poller.
+
+The poller is safe on a mailbox that also receives other mail: it refuses to read a whole inbox without a sender list, looks at headers first, never downloads or marks mail from anyone else, only considers recent unread messages (capped per poll), and refuses senders the mail server reported as forged (SPF/DKIM/DMARC).
 
 ### API
 
@@ -271,8 +280,9 @@ Observability: structured JSON logs per node (job id, duration, outcome), token 
 app/
   main.py               FastAPI app + /webhook/inbound-email + authenticated API
   config.py · cli.py    pydantic-settings (all thresholds) · kb build, process, imap
+  doctor.py             configuration check
   llm.py                provider-agnostic structured output (Claude / OpenAI), vision, retries
-  intake/               common.py (dedup, jobs, recovery, CSV split) · webhook.py (signatures) · imap_poller.py · simulate.py
+  intake/               common.py (dedup, jobs, recovery, CSV split) · webhook.py (signatures) · imap_poller.py · simulate.py · mailer.py
   ingestion/loaders.py  PDF / image / CSV detection, text, page images, OCR
   extraction/           schema.py · prompts.py · extractor.py (LLM / CSV / heuristic) · verify.py (grounding)
   rag/                  store.py · ingest_kb.py · vendors.py · catalog.py · policy.py · rules.py (limits from text)
@@ -284,5 +294,5 @@ review_ui/              Streamlit review desk: app.py (shell) · pages.py · doc
 data/seed/ · data/samples/ · data/eval/     knowledge base · demo + labelled files · retrieval cases
 scripts/                init_env · make_samples · simulate_webhook · send_test_email · eval_extraction · eval_retrieval · ablation
 workflows/              n8n_intake.json
-tests/                  205 tests, offline
+tests/                  219 tests, offline
 ```
