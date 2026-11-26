@@ -203,3 +203,16 @@ def test_uncertain_vendor_is_not_preselected(samples):
     at = open_page("queue")
     assert at.selectbox[0].value == "No record chosen"
     assert "resembles Acme Industrial Supplies Inc., not confirmed" in html(at)
+
+
+def test_send_page_can_use_real_email(monkeypatch):
+    sent = []
+    monkeypatch.setenv("SMTP_USER", "me@gmail.com")
+    monkeypatch.setenv("SMTP_PASSWORD", "app-password")
+    monkeypatch.setenv("IMAP_USER", "po@gmail.com")
+    reset_settings_cache()
+    monkeypatch.setattr("app.intake.mailer.connect", lambda s: pytest.fail("must not connect"))
+    monkeypatch.setattr("review_ui.pages.send_email", lambda files, s, subject: sent.append(files[0][0]))
+    at = open_page("send")
+    click(at, "Send")
+    assert sent == ["01_clean_northwind.pdf"] and any("po@gmail.com" in e.value for e in at.success)

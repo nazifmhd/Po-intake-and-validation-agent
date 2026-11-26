@@ -10,6 +10,7 @@ import streamlit as st
 from app.actions import review as review_actions
 from app.config import PROJECT_ROOT, get_settings
 from app.extraction.schema import PurchaseOrder
+from app.intake.mailer import send_email, smtp_ready
 from app.intake.simulate import NotConfigured, post_email
 from app.models import ReviewQueueItem
 from app.rag.rules import load_rules
@@ -108,6 +109,16 @@ def overview() -> None:
 # ================================================================== send a PO
 def _send(files: list[tuple[str, bytes]], sender: str, subject: str, forged: bool = False) -> None:
     settings = get_settings()
+    if st.session_state.get("transport") == "Real email" and not forged:
+        try:
+            with st.spinner("Sending the email…"):
+                send_email(files, settings, subject=subject)
+            st.session_state["sent"] = ("good", "Email sent. It appears below as soon as the agent picks it up from "
+                                                f"{settings.test_email_to or settings.imap_user}.")
+        except Exception as exc:
+            from app.doctor import _explain
+            st.session_state["sent"] = ("bad", f"The email could not be sent: {_explain(exc)}")
+        return
     try:
         r = post_email(files, settings, url=settings.api_base_url, sender=sender, subject=subject, bad_signature=forged)
     except NotConfigured as exc:
@@ -135,8 +146,13 @@ def _live_feed() -> None:
 
 
 def send() -> None:
-    title("Send a PO", "Posts a signed inbound email to the agent's webhook, the way the mail provider does. "
-                       "Only the mail transport is simulated.")
+    real = smtp_ready(get_settings())
+    title("Send a PO", "Sends a purchase order to the agent, as a real email or straight to its signed webhook." if real else
+          "Posts a signed inbound email to the agent's webhook, the way the mail provider does. "
+          "Only the mail transport is simulated.")
+    if real:
+        st.segmented_control("Send by", ["Real email", "Webhook"], default="Real email", key="transport",
+                             label_visibility="collapsed")
     left, right = st.columns([2, 3], gap="medium")
     with left:
         with st.container(border=True, key="box-demo"):
