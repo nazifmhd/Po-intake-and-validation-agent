@@ -4,6 +4,7 @@
     python -m app.cli process FILE [FILE ...]        run files through intake + pipeline (as one "email")
           [--no-rag]                                 ablation: knowledge base off
     python -m app.cli imap [--once]                  IMAP poller
+    python -m app.cli check                          is everything that is configured working? (free, no secrets shown)
 """
 from __future__ import annotations
 
@@ -34,9 +35,18 @@ def main() -> None:
     imap = sub.add_parser("imap")
     imap.add_argument("--once", action="store_true")
 
+    sub.add_parser("check")
+
     args = parser.parse_args()
     settings = get_settings()
     configure_logging(settings.log_level, json_logs=False, stream=sys.stderr)  # stdout = JSON result
+
+    if args.cmd == "check":
+        from app.doctor import BAD, run
+        results = run(settings)
+        for name, status, detail in results:
+            print(f"{status:5s} {name:18s} {detail}")
+        sys.exit(any(status == BAD for _, status, _ in results))
 
     if args.cmd == "kb":
         from app.rag.ingest_kb import build_knowledge_base
