@@ -131,12 +131,25 @@ def _send(files: list[tuple[str, bytes]], sender: str, subject: str, forged: boo
     if r.status_code == 200:
         body = r.json()
         n = len(body["jobs"])
-        text = f"Accepted: {n} document{'s' if n > 1 else ''} on the way to the agent" if body["jobs"] else f"Nothing to process: {body['status']}"
+        why = {"rejected_sender": f"{sender} is not an allowed sender (ALLOWED_SENDERS in .env), so the agent refused it",
+               "duplicate": "this exact email was already received", "all_rejected": "no attachment could be used",
+               "no_attachment": "the email had no attachment"}.get(body["status"], body["status"])
+        text = f"Accepted: {n} document{'s' if n > 1 else ''} on the way to the agent" if body["jobs"] else f"Not processed: {why}"
         if body["rejected"]:
             text += "; refused: " + ", ".join(f"{x['filename']} ({x['reason']})" for x in body["rejected"])
         st.session_state["sent"] = ("good" if body["jobs"] else "warn", text)
     else:
         st.session_state["sent"] = ("bad", f"HTTP {r.status_code}: {r.json().get('detail', r.text)}")
+
+
+def default_sender() -> str:
+    """Demo mail comes from someone the agent accepts: the first allowed sender, if a list is configured."""
+    s = get_settings()
+    if s.allowed_sender_list:
+        return s.allowed_sender_list[0]
+    if s.allowed_sender_domain_list:
+        return f"Buyer <buyer@{s.allowed_sender_domain_list[0]}>"
+    return "Dana Buyer <dana@northbridge.example>"
 
 
 @st.fragment(run_every="2s")
@@ -163,11 +176,11 @@ def send() -> None:
                 a, b = st.columns([3, 1], vertical_alignment="center")
                 a.html(f"<b style='font-weight:600'>{esc(head)}</b><br><span style='color:var(--ink2);font-size:.86rem'>{esc(body)}</span>")
                 if b.button("Send", key=f"demo-{name}", width="stretch", disabled=not path.exists()):
-                    _send([(name, path.read_bytes())], "Dana Buyer <dana@northbridge.example>", f"PO attached: {head}")
+                    _send([(name, path.read_bytes())], default_sender(), f"PO attached: {head}")
         with st.container(border=True, key="box-own"):
             put('<h3 class="sec">Your own document</h3>')
             files = st.file_uploader("PDF, image or CSV", accept_multiple_files=True, label_visibility="collapsed")
-            sender = st.text_input("From", "Dana Buyer <dana@northbridge.example>")
+            sender = st.text_input("From", default_sender())
             x, y = st.columns(2)
             if x.button("Send email", type="primary", width="stretch", disabled=not files):
                 _send([(f.name, f.getvalue()) for f in files], sender, "Purchase order attached")

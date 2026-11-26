@@ -229,3 +229,22 @@ def test_json_tab_shows_the_extracted_purchase_order(samples):
     run_pipeline(str(samples["01_clean_northwind"]))
     filed = [json.loads(j.proto.body) for j in open_page("filed").json]
     assert filed[0]["po_number"]["value"] == "PO-2026-0412"
+
+
+def test_send_page_sends_as_an_allowed_sender_and_explains_a_refusal(monkeypatch):
+    calls = []
+    status = {"value": "accepted"}
+
+    def fake_post(url, **kw):
+        calls.append(kw["data"]["sender"])
+        return SimpleNamespace(status_code=200, json=lambda: {"jobs": [{}] if status["value"] == "accepted" else [],
+                                                              "rejected": [], "status": status["value"]})
+    monkeypatch.setattr("app.intake.simulate.httpx.post", fake_post)
+    monkeypatch.setenv("ALLOWED_SENDERS", "buyer@company.example, other@company.example")
+    reset_settings_cache()
+    at = open_page("send")
+    click(at, "Send")
+    assert calls == ["buyer@company.example"] and field(at, "From").value == "buyer@company.example"
+    status["value"] = "rejected_sender"
+    click(at, "Send")
+    assert any("not an allowed sender" in e.value for e in at.warning)
