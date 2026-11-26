@@ -127,7 +127,7 @@ python -m app.cli kb build                              # 3 Chroma collections
 python -m app.cli check                                 # is everything configured working? (free)
 uvicorn app.main:app --port 8000                        # API + webhook
 streamlit run review_ui/app.py                          # review UI on :8501
-pytest                                                  # 219 tests, fully offline
+pytest                                                  # 220 tests, fully offline
 ```
 
 No API key? Set `LLM_PROVIDER=heuristic`. Text PDFs and CSVs then run end to end with a deterministic parser; scans go to review.
@@ -294,5 +294,5 @@ review_ui/              Streamlit review desk: app.py (shell) · pages.py · doc
 data/seed/ · data/samples/ · data/eval/     knowledge base · demo + labelled files · retrieval cases
 scripts/                init_env · make_samples · simulate_webhook · send_test_email · eval_extraction · eval_retrieval · ablation
 workflows/              n8n_intake.json
-tests/                  219 tests, offline
+tests/                  220 tests, offline
 ```

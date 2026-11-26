@@ -216,3 +216,16 @@ def test_send_page_can_use_real_email(monkeypatch):
     at = open_page("send")
     click(at, "Send")
     assert sent == ["01_clean_northwind.pdf"] and any("po@gmail.com" in e.value for e in at.success)
+
+
+def test_json_tab_shows_the_extracted_purchase_order(samples):
+    import json
+    out = run_pipeline(str(samples["06_math_error"]))
+    at = open_page("queue")
+    shown = [json.loads(j.proto.body) for j in at.json]
+    assert shown[0]["po_number"]["value"] == "PO-2026-0430" and shown[0]["total"] == 2121.40
+    assert shown[0]["vendor_name"]["evidence"] and shown[1]["flags"] == ["math_mismatch"]
+    assert shown[0] == out["po"]
+    run_pipeline(str(samples["01_clean_northwind"]))
+    filed = [json.loads(j.proto.body) for j in open_page("filed").json]
+    assert filed[0]["po_number"]["value"] == "PO-2026-0412"

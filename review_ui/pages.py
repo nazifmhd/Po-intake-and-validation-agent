@@ -1,6 +1,7 @@
 """The pages of the review desk. Rules live in app/actions/review.py; nothing here decides anything."""
 from __future__ import annotations
 
+import json
 import re
 import textwrap
 
@@ -452,21 +453,43 @@ def queue(reviewer: str) -> None:
             _flags(flags, reasons) if flags else st.success("All checks pass after the correction. Ready to approve.")
             _decision(item, po, vm, flags, reviewer)
         with work:
-            tabs = st.tabs(["Document", "Values", "Items", "Vendor", "Policy", "Correct values", "History"])
+            tabs = st.tabs(["Document", "Values", "JSON", "Items", "Vendor", "Policy", "Correct values", "History"])
             with tabs[0]:
                 document.show(item.source_file, item.doc_type, po, flags, checks, str(item.id))
             with tabs[1]:
                 _fields(po) if po else empty("Nothing could be read", "Key the values in under Correct values.")
             with tabs[2]:
-                _items(po, checks) if po else empty("Nothing could be read", "Key the values in under Correct values.")
+                _json(po, item.po_number, f"q-{item.id}", {
+                    "decision": "needs_review", "flags": flags, "reasons": reasons,
+                    "vendor_match": {k: vm.get(k) for k in ("status", "vendor_id", "canonical_name", "vendor_status",
+                                                            "score", "reason")},
+                    "price_checks": [{k: c.get(k) for k in ("line_no", "matched_sku", "match_method", "unit_price",
+                                                            "catalog_unit_price", "deviation_pct", "status")}
+                                     for c in checks]})
             with tabs[3]:
-                _vendor(po, vm) if vm else empty("Vendor was not checked", "The document could not be read.")
+                _items(po, checks) if po else empty("Nothing could be read", "Key the values in under Correct values.")
             with tabs[4]:
-                _policy(jl(item.policy_findings_json, {}))
+                _vendor(po, vm) if vm else empty("Vendor was not checked", "The document could not be read.")
             with tabs[5]:
-                _correction_form(item, po, reviewer)
+                _policy(jl(item.policy_findings_json, {}))
             with tabs[6]:
+                _correction_form(item, po, reviewer)
+            with tabs[7]:
                 _pipeline(item, jl(item.errors_json, []))
+
+
+def _json(po: dict, po_number: str | None, key: str, validation: dict | None = None) -> None:
+    """The extraction output exactly as stored: the PurchaseOrder schema, per-field confidence and evidence."""
+    if not po:
+        empty("Nothing could be read", "There is no extracted JSON for this document.")
+        return
+    put('<h3 class="sec">Extracted purchase order<small>PurchaseOrder schema · app/extraction/schema.py</small></h3>')
+    st.json(po, expanded=2)
+    st.download_button("Download JSON", json.dumps(po, indent=2), file_name=f"{po_number or 'purchase-order'}.json",
+                       mime="application/json", key=f"json-{key}", icon=":material/data_object:")
+    if validation:
+        with st.expander("Validation result: what the knowledge base and the rules found"):
+            st.json(validation, expanded=2)
 
 
 # ================================================================== filed POs
@@ -508,7 +531,11 @@ def filed() -> None:
         put('<h3 class="sec" style="margin-top:1rem">History</h3>')
         _timeline(data.audit(40, rec.job_id))
     with right:
-        document.show(rec.source_file, None, jl(rec.extracted_json, {}), [], [], f"po-{rec.id}")
+        doc_tab, json_tab = st.tabs(["Document", "JSON"])
+        with doc_tab:
+            document.show(rec.source_file, None, jl(rec.extracted_json, {}), [], [], f"po-{rec.id}")
+        with json_tab:
+            _json(jl(rec.extracted_json, {}), rec.po_number, f"po-{rec.id}")
 
 
 # ================================================================== knowledge base
